@@ -1,0 +1,6 @@
+.vscode
+out_frag.glsl
+fragment.glsl
+sdf
+sdflc
+test*
