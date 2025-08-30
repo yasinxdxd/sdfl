@@ -12,6 +12,10 @@ var functionSymbols = map[string]FunDef{
 
 var generatedCode = ""
 
+func Reset() {
+	generatedCode = ""
+}
+
 func GetCode() string {
 	return generatedCode
 }
