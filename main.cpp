@@ -43,11 +43,11 @@ int main(void) {
     size_t bufferSize = resolution * resolution * resolution * sizeof(float);
     sdfBuffer.initialize(bufferSize);
     
-    Shader* computeShader = new Shader("compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
+    Shader* computeShader = new Shader("sdfl/out_compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
     glcompiler::compile_and_attach_shaders(computeShader);
     Shader::dispatch_compute(computeShader, 8, 8, 8, [&](Shader* shader) {
-        computeShader->set<float, 3>("minBound", -1.0f, -1.0f, -1.0f);
-        computeShader->set<float, 3>("maxBound", 1.0f, 1.0f, 1.0f);
+        computeShader->set<float, 3>("minBound", -10.0f, -10.0f, -10.0f);
+        computeShader->set<float, 3>("maxBound", 10.0f, 10.0f, 10.0f);
         computeShader->set<int>("resolution", resolution);
     });
     

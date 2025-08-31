@@ -10,31 +10,47 @@ var functionSymbols = map[string]FunDef{
 	"box":    {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
 }
 
-var generatedCode = ""
+var generatedCodeFragmentShader = ""
+var generatedCodeComputeShader = ""
 
 func Reset() {
-	generatedCode = ""
+	generatedCodeFragmentShader = ""
+	generatedCodeComputeShader = ""
 }
 
-func GetCode() string {
-	return generatedCode
+func GetFragmentCode() string {
+	return generatedCodeFragmentShader
+}
+
+func GetComputeCode() string {
+	return generatedCodeComputeShader
 }
 
 type generator interface {
-	generate()
+	generate(args ...any)
 }
 
-func generateCode(code string, args ...any) {
-	generatedCode += fmt.Sprintf(code, args...)
+func generateFragmentCode(code string, args ...any) {
+	generatedCodeFragmentShader += fmt.Sprintf(code, args...)
+}
+
+func generateComputeCode(code string, args ...any) {
+	generatedCodeComputeShader += fmt.Sprintf(code, args...)
+}
+
+func generateCodeBoth(code string, args ...any) {
+	generateFragmentCode(code, args...)
+	generateComputeCode(code, args...)
 }
 
 func Generate(prog *Program) {
 	prog.generate()
 }
 
-func (prog *Program) generate() {
-	generateGlslHeader()
-	generateGlslBuiltinFunctions()
+func (prog *Program) generate(args ...any) {
+	generateGlslFragmentHeader()
+	generateGlslComputeHeader()
+	generateGlslBuiltinSDFFunctions()
 	sceneCall := prog.Exprs[0].FunCall
 	if sceneCall.Id != "scene" {
 		fmt.Println("ERROR: scene function must be called")
@@ -76,10 +92,11 @@ func (prog *Program) generate() {
 
 	generateGlslRaymarchEngine()
 
-	generateGlslMain(cameraCall)
+	generateGlslFragmentMain(cameraCall)
+	generateGlslComputeMain()
 }
 
-func (expr *Expr) generate() {
+func (expr *Expr) generate(args ...any) {
 	switch expr.Type {
 	case AST_FUN_CALL:
 		expr.FunCall.generate()
@@ -98,7 +115,7 @@ func (expr *Expr) generate() {
 	}
 }
 
-func (funCall *FunCall) generate() {
+func (funCall *FunCall) generate(args ...any) {
 	funDef, ok := functionSymbols[funCall.Id]
 
 	if ok {
@@ -130,48 +147,56 @@ func (funCall *FunCall) generate() {
 		case FUN_BUILTIN:
 			exprs := orderedArgs()
 			// println(len(exprs))
-			generateCode("    d = %s(%s(p, ", "sdfl_PushScene", genFunCall(funDef.Id))
+			generateCodeBoth("    d = %s(%s(p, ", "sdfl_PushScene", genFunCall(funDef.Id))
 			for i, e := range exprs {
 				e.generate()
 				if i < len(exprs)-1 {
-					generateCode(",")
+					generateCodeBoth(",")
 				}
 			}
-			generateCode("));\n")
+			generateCodeBoth("));\n")
 		default:
 			fmt.Println("NOT IMPLEMENTED YET!")
 		}
 	}
 }
 
-func (tuple *Tuple) generate() {
-	generateCode("vec3(%s, %s, %s)", tuple.Values[0], tuple.Values[1], tuple.Values[2])
+func (tuple *Tuple) generate(args ...any) {
+	var isCamera = false
+	if len(args) > 0 {
+		isCamera = args[0].(bool)
+	}
+	if isCamera {
+		generateFragmentCode("vec3(%s, %s, %s)", tuple.Values[0], tuple.Values[1], tuple.Values[2])
+	} else {
+		generateCodeBoth("vec3(%s, %s, %s)", tuple.Values[0], tuple.Values[1], tuple.Values[2])
+	}
 }
 
-func (number *Number) generate() {
-	generateCode(number.Value)
+func (number *Number) generate(args ...any) {
+	generateCodeBoth(number.Value)
 }
 
-func (arrExpr *ArrExpr) generate() {
+func (arrExpr *ArrExpr) generate(args ...any) {
 	for _, expr := range arrExpr.Exprs {
 		expr.generate()
 	}
 }
 
 func generateGlslCamera(cameraFunCall *FunCall) {
-	generateCode("    // generated camera position\n")
-	generateCode("    vec3 ray_origin = ")
-	cameraFunCall.FunNamedArgs["position"].Expr.Tuple.generate()
-	generateCode(";")
-	generateCode(`
+	generateFragmentCode("    // generated camera position\n")
+	generateFragmentCode("    vec3 ray_origin = ")
+	cameraFunCall.FunNamedArgs["position"].Expr.Tuple.generate(true)
+	generateFragmentCode(";")
+	generateFragmentCode(`
     vec3 ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel
     
     float d = sdfl_RayMarch(ray_origin, ray_dir);
 `)
 }
 
-func generateGlslMain(cameraFunCall *FunCall) {
-	generateCode(`
+func generateGlslFragmentMain(cameraFunCall *FunCall) {
+	generateFragmentCode(`
 void main() {
     vec2 uv = o_vertex_uv * 2. - 1.;
     uv.y *= float(window_size.y) / float(window_size.x);
@@ -179,7 +204,7 @@ void main() {
 
 	generateGlslCamera(cameraFunCall)
 
-	generateCode(`
+	generateFragmentCode(`
     // lightning
     vec3 p = ray_origin + ray_dir * d;
     float diff = sdfl_GetLight(p); // diffuse lightning
@@ -187,11 +212,29 @@ void main() {
     frag_color = vec4(color, 1.0);
 }
 `)
-
 }
 
-func generateGlslHeader() {
-	generateCode(`
+func generateGlslComputeMain() {
+	generateComputeCode(`
+void main() {
+    ivec3 gid = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(gid, ivec3(resolution)))) return;
+
+    vec3 uv = vec3(gid) / float(resolution - 1);
+    vec3 p = mix(minBound, maxBound, uv);
+
+    // float d = sdSphere(p, 0.3);
+    float d = sdfl_GetDistScene(p);
+
+    // convert 3D index to 1D
+    int index = gid.z * resolution * resolution + gid.y * resolution + gid.x;
+    sdfData[index] = d;
+}
+`)
+}
+
+func generateGlslFragmentHeader() {
+	generateFragmentCode(`
 // sdfl generated code
 
 #version 430 core
@@ -213,8 +256,29 @@ uniform float elapsed_time;
 `)
 }
 
-func generateGlslBuiltinFunctions() {
-	generateCode(`
+func generateGlslComputeHeader() {
+	generateComputeCode(`
+// sdfl generated code
+
+#version 430
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+// SSBO
+layout(std430, binding = 0) buffer SDFBuffer {
+    float sdfData[];
+};
+
+uniform vec3 minBound;
+uniform vec3 maxBound;
+uniform int resolution;
+
+#define SDFL_MAX_DISTANCE 100.
+`)
+}
+
+func generateGlslBuiltinSDFFunctions() {
+	code := `
 float sdfl_builtin_plane(vec3 p, float height) {    
     return p.y - height;
 }
@@ -234,12 +298,13 @@ float sdfl_builtin_box(vec3 p, vec3 bpos, vec3 bsize) {
     // Outside distance + inside distance
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
-`)
-
+`
+	generateFragmentCode(code)
+	generateComputeCode(code)
 }
 
 func generateGlslRaymarchEngine() {
-	generateCode(`
+	generateFragmentCode(`
 float sdfl_RayMarch(vec3 ray_origin, vec3 ray_dir) {
     float dfo = 0.; // distance from ray origin
 
@@ -288,7 +353,7 @@ float sdfl_GetLight(vec3 p) {
 }
 
 func generateGlslDistSceneBegin() {
-	generateCode(`
+	code := `
 float _scene_dist = SDFL_MAX_DISTANCE;
 
 float sdfl_PushScene(float d) {
@@ -302,12 +367,16 @@ float sdfl_GetDistScene(vec3 p) {
 
     // generated sdf shapes
     float d;
-`)
+`
+	generateFragmentCode(code)
+	generateComputeCode(code)
 }
 
 func generateGlslDistSceneEnd() {
-	generateCode(`
+	code := `
     return d;
 }
-`)
+`
+	generateFragmentCode(code)
+	generateComputeCode(code)
 }

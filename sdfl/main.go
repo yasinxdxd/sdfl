@@ -36,7 +36,18 @@ func compile(filePath string) {
 	f, err := os.Create("out_frag.glsl")
 	check(err)
 	defer f.Close()
-	len, err := f.WriteString(sdfl.GetCode())
+	len, err := f.WriteString(sdfl.GetFragmentCode())
+	check(err)
+	fmt.Println(len, "bytes written successfully")
+
+	genComputeShader()
+}
+
+func genComputeShader() {
+	f, err := os.Create("out_compute.glsl")
+	check(err)
+	defer f.Close()
+	len, err := f.WriteString(sdfl.GetComputeCode())
 	check(err)
 	fmt.Println(len, "bytes written successfully")
 }
