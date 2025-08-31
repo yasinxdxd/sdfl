@@ -3,6 +3,7 @@
 
 #include <string>
 #include <shader_compiler.hpp>
+#include <defs.hh>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -14,7 +15,8 @@ public:
     {
         VERTEX_SHADER,
         GEOMETRY_SHADER,
-        FRAGMENT_SHADER
+        FRAGMENT_SHADER,
+        COMPUTE_SHADER
     };
 
 public:
@@ -25,6 +27,8 @@ public:
     ~Shader();
 
     void load_shader_code(const char* path, ShaderCodeType type = ShaderCodeType::FRAGMENT_SHADER);
+
+    static void dispatch_compute(Shader* shader, unsigned int x, unsigned int y, unsigned int z, shader_function_capture func);
 
     
     template <typename T, size_t _D = 1>
@@ -48,6 +52,7 @@ private:
     std::string* m_shader_vertex_code_text;
     std::string* m_shader_geometry_code_text;
     std::string* m_shader_fragment_code_text;
+    std::string* m_shader_compute_code_text;
     unsigned int m_gl_shader_program_id;
     bool m_use_default_vertex_shader;
 

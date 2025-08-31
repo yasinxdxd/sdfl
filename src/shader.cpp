@@ -11,7 +11,8 @@
 Shader::Shader():
 m_shader_fragment_code_text(nullptr),
 m_shader_geometry_code_text(nullptr),
-m_shader_vertex_code_text(nullptr)
+m_shader_vertex_code_text(nullptr),
+m_shader_compute_code_text(nullptr)
 {
     m_use_default_vertex_shader = true;
 }
@@ -19,7 +20,8 @@ m_shader_vertex_code_text(nullptr)
 Shader::Shader(const char* path, ShaderCodeType type):
 m_shader_fragment_code_text(nullptr),
 m_shader_geometry_code_text(nullptr),
-m_shader_vertex_code_text(nullptr)
+m_shader_vertex_code_text(nullptr),
+m_shader_compute_code_text(nullptr)
 {
     m_use_default_vertex_shader = true;
     load_shader_code(path, type);
@@ -64,6 +66,12 @@ void Shader::load_shader_code(const char* path, ShaderCodeType type)
         shader_text_referance = &m_shader_fragment_code_text;
         break;
     }
+    case ShaderCodeType::COMPUTE_SHADER:
+    {
+        shader_text_referance = &m_shader_compute_code_text;
+        m_use_default_vertex_shader = false;
+        break;
+    }
     default:
         break;
     }
@@ -98,6 +106,53 @@ void Shader::load_shader_code(const char* path, ShaderCodeType type)
         std::endl;
     }
     
+}
+
+void Shader::dispatch_compute(Shader* shader, unsigned int x, unsigned int y, unsigned int z, shader_function_capture func) {
+    // --- quick check: is this a compute-only program? ---
+    // (we know from compile_and_attach_shaders() that if compute code was present,
+    //   then only a compute shader was attached + linked)
+    if (!shader || !shader->m_shader_compute_code_text && !shader->m_gl_shader_program_id) {
+        std::cerr << "[Error] Invalid shader object.\n";
+        return;
+    }
+
+    // Query and print compute shader limits
+    GLint workGroupCount[3], workGroupSize[3], maxInvocations;
+    for (int i = 0; i < 3; i++)
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, i, &workGroupCount[i]);
+    for (int i = 0; i < 3; i++)
+        glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, i, &workGroupSize[i]);
+    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &maxInvocations);
+
+    std::cout << "=== Compute Shader Limits ===\n";
+    std::cout << "Max work group counts: ("
+              << workGroupCount[0] << ", "
+              << workGroupCount[1] << ", "
+              << workGroupCount[2] << ")\n";
+    std::cout << "Max work group sizes: ("
+              << workGroupSize[0] << ", "
+              << workGroupSize[1] << ", "
+              << workGroupSize[2] << ")\n";
+    std::cout << "Max total invocations: " << maxInvocations << "\n";
+
+    // --- validate dispatch ---
+    if (x > (GLuint)workGroupCount[0] ||
+        y > (GLuint)workGroupCount[1] ||
+        z > (GLuint)workGroupCount[2]) {
+        std::cerr << "[Error] Dispatch exceeds max work group counts.\n";
+        return;
+    }
+
+    // --- dispatch ---
+    glUseProgram(shader->m_gl_shader_program_id);
+    if (func) func(shader);
+    glDispatchCompute(x, y, z);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    glUseProgram(0);
+
+    std::cout << "[Info] Compute shader dispatched with groups ("
+              << x << ", " << y << ", " << z << ")\n";
 }
 
 Shader::operator unsigned int()

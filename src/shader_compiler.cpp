@@ -19,11 +19,13 @@ bool glcompiler::is_initialized()
 {
     return _priv::is_compiler_initialized;
 }
+
 void glcompiler::destroy()
 {
     if (is_initialized())
         glDeleteShader(_SHADER_DEFAULT_GL_VERTEX_SHADER);
 }
+
 void glcompiler::compile_and_attach_shaders(Shader *shader)
 {
     glshader_t fragment_shader;
@@ -35,6 +37,48 @@ void glcompiler::compile_and_attach_shaders(Shader *shader)
     
     // shader Program
     shader->m_gl_shader_program_id = glCreateProgram();
+
+
+    if (shader->m_shader_compute_code_text != nullptr) {
+        const char* _compute_code = shader->m_shader_compute_code_text->c_str();
+
+        glshader_t compute_shader = glCreateShader(GL_COMPUTE_SHADER);
+        glShaderSource(compute_shader, 1, &_compute_code, NULL);
+        glCompileShader(compute_shader);
+
+        // error checking
+        int success;
+        char info_log[512];
+        glGetShaderiv(compute_shader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(compute_shader, 512, NULL, info_log);
+            std::cout << "ERROR::SHADER::COMPUTE::COMPILATION_FAILED\n" << info_log << std::endl;
+            memcpy(compiler_info.compile_log_info, info_log, 512);
+        } else {
+            memset(compiler_info.compile_log_info, 0, 512);
+        }
+
+        glAttachShader(shader->m_gl_shader_program_id, compute_shader);
+
+        // link program (only compute shader needed)
+        glLinkProgram(shader->m_gl_shader_program_id);
+
+        glGetProgramiv(shader->m_gl_shader_program_id, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(shader->m_gl_shader_program_id, 512, NULL, info_log);
+            std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << info_log << std::endl;
+            memcpy(compiler_info.compile_log_info, info_log, 512);
+        }
+
+        glDeleteShader(compute_shader);
+
+        // cleanup
+        delete shader->m_shader_compute_code_text;
+        shader->m_shader_compute_code_text = nullptr;
+
+        return; // no vertex/fragment attach in compute-only programs
+    }
+
 
 
     fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);

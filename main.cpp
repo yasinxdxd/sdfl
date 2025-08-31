@@ -1,5 +1,6 @@
 #include <window.hpp>
 #include <shader.hpp>
+#include <ssbo.hpp>
 #include <shader_compiler.hpp>
 
 #define SHAPE_QUAD
@@ -10,6 +11,7 @@
 #include <file_watcher.hpp>
 
 
+
 int main(void) {
     yt2d::Window window("hello", 480, 340);
 
@@ -17,6 +19,39 @@ int main(void) {
     glcompiler::init();
     Shader* shader = new Shader("sdfl/out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
     glcompiler::compile_and_attach_shaders(shader);
+
+
+    int resolution = 64;
+    
+    // create SSBO for SDF output
+    SSBO sdfBuffer(0); // binding point 0 // inside glsl: layout(std430, binding = 0)
+    size_t bufferSize = resolution * resolution * resolution * sizeof(float);
+    sdfBuffer.initialize(bufferSize);
+    
+    Shader* computeShader = new Shader("compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
+    glcompiler::compile_and_attach_shaders(computeShader);
+    Shader::dispatch_compute(computeShader, 8, 8, 8, [&](Shader* shader) {
+        computeShader->set<float, 3>("minBound", -1.0f, -1.0f, -1.0f);
+        computeShader->set<float, 3>("maxBound", 1.0f, 1.0f, 1.0f);
+        computeShader->set<int>("resolution", resolution);
+    });
+    
+    sdfBuffer.waitForComputeShader();
+    
+    // get SDF data from gpu
+    std::vector<float> sdfData = sdfBuffer.downloadData<float>();
+    
+    std::cout << "Downloaded " << sdfData.size() << " SDF values" << std::endl;
+    
+    for (int z = 0; z < resolution; z++) {
+        for (int y = 0; y < resolution; y++) {
+            for (int x = 0; x < resolution; x++) {
+                int index = z * resolution * resolution + y * resolution + x;
+                float sdfValue = sdfData[index];
+            }
+        }
+    }
+
 
     FileWatcher fw("sdfl/out_frag.glsl");
 
@@ -53,5 +88,6 @@ int main(void) {
     }
 
     delete shader;
+    delete computeShader;
     glcompiler::destroy();
 }
