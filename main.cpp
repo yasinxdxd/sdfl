@@ -1,4 +1,5 @@
 #include <window.hpp>
+#include <input.hpp>
 #include <shader.hpp>
 #include <ssbo.hpp>
 #include <shader_compiler.hpp>
@@ -8,9 +9,23 @@
 
 #include <chrono>
 #include <iostream>
+#include <fstream>
 #include <file_watcher.hpp>
 
-
+void exportSDFToBinary(const std::vector<float>& sdfData, int resolution, 
+                      const std::string& filename) {
+    std::ofstream file(filename, std::ios::binary);
+    
+    // Write header info
+    file.write(reinterpret_cast<const char*>(&resolution), sizeof(int));
+    
+    // Write SDF data
+    file.write(reinterpret_cast<const char*>(sdfData.data()), 
+               sdfData.size() * sizeof(float));
+    
+    file.close();
+    std::cout << "Exported SDF data to " << filename << std::endl;
+}
 
 int main(void) {
     yt2d::Window window("hello", 480, 340);
@@ -43,14 +58,16 @@ int main(void) {
     
     std::cout << "Downloaded " << sdfData.size() << " SDF values" << std::endl;
     
-    for (int z = 0; z < resolution; z++) {
-        for (int y = 0; y < resolution; y++) {
-            for (int x = 0; x < resolution; x++) {
-                int index = z * resolution * resolution + y * resolution + x;
-                float sdfValue = sdfData[index];
-            }
-        }
-    }
+    exportSDFToBinary(sdfData, resolution, "testpy/test_sdf_data.bin");
+
+    // for (int z = 0; z < resolution; z++) {
+    //     for (int y = 0; y < resolution; y++) {
+    //         for (int x = 0; x < resolution; x++) {
+    //             int index = z * resolution * resolution + y * resolution + x;
+    //             float sdfValue = sdfData[index];
+    //         }
+    //     }
+    // }
 
 
     FileWatcher fw("sdfl/out_frag.glsl");
@@ -64,6 +81,9 @@ int main(void) {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         window.pollEvent();
 
+        if (Input::isKeyPressed(KeyCode::KEY_ESCAPE)) {
+            break;
+        }
 
         if (fw.hasChanged()) {
             delete shader;
