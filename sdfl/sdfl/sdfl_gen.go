@@ -3,11 +3,13 @@ package sdfl
 import "fmt"
 
 var functionSymbols = map[string]FunDef{
-	"scene":  {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
-	"camera": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
-	"plane":  {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
-	"sphere": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
-	"box":    {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
+	"scene":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
+	"camera":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
+	"plane":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
+	"sphere":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
+	"box":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
+	"torus":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "torus", FunDefArgNames: []string{"position", "radius", "tickness"}},
+	"rotateAround": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_ROTATE_AROUND, Id: "rotateAround", FunDefArgNames: []string{"position", "rotation", "child"}},
 }
 
 var generatedCodeFragmentShader = ""
@@ -115,7 +117,20 @@ func (expr *Expr) generate(args ...any) {
 	}
 }
 
+var tempVarCounter int
+
+func freshVar(base string) string {
+	name := fmt.Sprintf("%s%d", base, tempVarCounter)
+	tempVarCounter++
+	return name
+}
+
 func (funCall *FunCall) generate(args ...any) {
+	rayPosition := "p"
+	if len(args) > 0 {
+		rayPosition = args[0].(string)
+	}
+
 	funDef, ok := functionSymbols[funCall.Id]
 
 	if ok {
@@ -144,10 +159,39 @@ func (funCall *FunCall) generate(args ...any) {
 		switch funDef.SymbolType {
 		// case FUN_BUILTIN_SCENE:
 		// case FUN_BUILTIN_CAMERA:
+		case FUN_BUILTIN_ROTATE_AROUND:
+			posExpr, okPos := funCall.FunNamedArgs["position"]
+			rotExpr, okRot := funCall.FunNamedArgs["rotation"]
+			childExpr, okChild := funCall.FunNamedArgs["child"]
+
+			if !okPos || !okRot || !okChild {
+				fmt.Println("ERROR: rotateAround missing args (needs position, rotation, child)")
+				return
+			}
+
+			qVar := freshVar("q")
+
+			// subtract pivot
+			generateCodeBoth(fmt.Sprintf("    vec3 %s = p - ", qVar))
+			posExpr.Expr.generate()
+			generateCodeBoth(";\n")
+
+			// rotate
+			generateCodeBoth(fmt.Sprintf("    %s = sdfl_RotationMatrix(radians(", qVar))
+			rotExpr.Expr.generate()
+			generateCodeBoth(fmt.Sprintf(")) * %s;\n", qVar))
+
+			// add pivot back
+			generateCodeBoth(fmt.Sprintf("    %s += ", qVar))
+			posExpr.Expr.generate()
+			generateCodeBoth(";\n")
+
+			// recurse with qVar instead of p
+			childExpr.Expr.FunCall.generate(qVar)
 		case FUN_BUILTIN:
 			exprs := orderedArgs()
 			// println(len(exprs))
-			generateCodeBoth("    d = %s(%s(p, ", "sdfl_PushScene", genFunCall(funDef.Id))
+			generateCodeBoth("    d = %s(%s(%s, ", "sdfl_PushScene", genFunCall(funDef.Id), rayPosition)
 			for i, e := range exprs {
 				e.generate()
 				if i < len(exprs)-1 {
@@ -298,6 +342,28 @@ float sdfl_builtin_box(vec3 p, vec3 bpos, vec3 bsize) {
     // Outside distance + inside distance
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
+
+float sdfl_builtin_torus(vec3 p, vec3 pos, float radius, float tickness) {
+	vec3 wp = p - pos;
+	vec2 t = vec2(radius, tickness);
+    vec2 q = vec2(length(wp.xz)-t.x,wp.y);
+    return length(q)-t.y;
+}
+
+mat3 sdfl_RotationMatrix(vec3 angles) {
+    // angles = (rx, ry, rz) in radians
+    float cx = cos(angles.x), sx = sin(angles.x);
+    float cy = cos(angles.y), sy = sin(angles.y);
+    float cz = cos(angles.z), sz = sin(angles.z);
+
+    // compose rotation: Rz * Ry * Rx
+    return mat3(
+        cy*cz, cz*sx*sy - cx*sz, sx*sz + cx*cz*sy,
+        cy*sz, cx*cz + sx*sy*sz, cx*sy*sz - cz*sx,
+        -sy,   cy*sx,            cx*cy
+    );
+}
+
 `
 	generateFragmentCode(code)
 	generateComputeCode(code)
