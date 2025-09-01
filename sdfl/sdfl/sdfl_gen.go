@@ -3,13 +3,16 @@ package sdfl
 import "fmt"
 
 var functionSymbols = map[string]FunDef{
-	"scene":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
-	"camera":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
-	"plane":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
-	"sphere":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
-	"box":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
-	"torus":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "torus", FunDefArgNames: []string{"position", "radius", "tickness"}},
-	"rotateAround": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_ROTATE_AROUND, Id: "rotateAround", FunDefArgNames: []string{"position", "rotation", "child"}},
+	"scene":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
+	"camera":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
+	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
+	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
+	"box":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
+	"torus":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "torus", FunDefArgNames: []string{"position", "radius", "thickness"}},
+	"rotateAround":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_ROTATE_AROUND, Id: "rotateAround", FunDefArgNames: []string{"position", "rotation", "child"}},
+	"smoothUnion":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothUnion", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
+	"smoothSubtraction":  {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothSubtraction", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
+	"smoothIntersection": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothIntersection", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
 }
 
 var generatedCodeFragmentShader = ""
@@ -117,12 +120,19 @@ func (expr *Expr) generate(args ...any) {
 	}
 }
 
-var tempVarCounter int
+var varCounters = make(map[string]int)
 
 func freshVar(base string) string {
-	name := fmt.Sprintf("%s%d", base, tempVarCounter)
-	tempVarCounter++
+	count := varCounters[base]
+	name := fmt.Sprintf("%s%d", base, count)
+	varCounters[base] = count + 1
 	return name
+}
+
+func undoFreshVar(base string) {
+	if varCounters[base] > 0 {
+		varCounters[base]--
+	}
 }
 
 func (funCall *FunCall) generate(args ...any) {
@@ -132,6 +142,7 @@ func (funCall *FunCall) generate(args ...any) {
 	}
 
 	funDef, ok := functionSymbols[funCall.Id]
+	println(funCall.Id, funDef.SymbolType, rayPosition)
 
 	if ok {
 
@@ -188,17 +199,54 @@ func (funCall *FunCall) generate(args ...any) {
 
 			// recurse with qVar instead of p
 			childExpr.Expr.FunCall.generate(qVar)
+		case FUN_BUILTIN_OP:
+			exprs := orderedArgs()
+			// child1
+			println(rayPosition)
+			exprs[0].FunCall.generate(rayPosition)
+			// child2
+			println(rayPosition)
+			exprs[1].FunCall.generate(rayPosition)
+			sd := freshVar("sd")
+			generateCodeBoth("    float %s = %s(", sd, genFunCall(funDef.Id))
+			undoFreshVar("sd")
+			undoFreshVar("sd")
+			sd = freshVar("sd")
+			generateCodeBoth(sd)
+			generateCodeBoth(", ")
+			undoFreshVar("sd")
+			undoFreshVar("sd")
+			sd = freshVar("sd")
+			generateCodeBoth(sd)
+			generateCodeBoth(", ")
+			// smooth_transition
+			exprs[2].generate()
+			generateCodeBoth(");\n")
+
+			generateCodeBoth("    d = %s(", "sdfl_PushScene")
+			sd = freshVar("sd")
+			sd = freshVar("sd")
+			generateCodeBoth(sd)
+			generateCodeBoth(");\n")
+
 		case FUN_BUILTIN:
 			exprs := orderedArgs()
-			// println(len(exprs))
-			generateCodeBoth("    d = %s(%s(%s, ", "sdfl_PushScene", genFunCall(funDef.Id), rayPosition)
+
+			sd := freshVar("sd")
+			generateCodeBoth("    float %s = %s(%s, ", sd, genFunCall(funDef.Id), rayPosition)
 			for i, e := range exprs {
 				e.generate()
 				if i < len(exprs)-1 {
 					generateCodeBoth(",")
 				}
 			}
-			generateCodeBoth("));\n")
+			generateCodeBoth(");\n")
+
+			generateCodeBoth("    d = %s(", "sdfl_PushScene")
+			undoFreshVar("sd")
+			sd = freshVar("sd")
+			generateCodeBoth(sd)
+			generateCodeBoth(");\n")
 		default:
 			fmt.Println("NOT IMPLEMENTED YET!")
 		}
@@ -343,11 +391,28 @@ float sdfl_builtin_box(vec3 p, vec3 bpos, vec3 bsize) {
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-float sdfl_builtin_torus(vec3 p, vec3 pos, float radius, float tickness) {
+float sdfl_builtin_torus(vec3 p, vec3 pos, float radius, float thickness) {
 	vec3 wp = p - pos;
-	vec2 t = vec2(radius, tickness);
+	vec2 t = vec2(radius, thickness);
     vec2 q = vec2(length(wp.xz)-t.x,wp.y);
     return length(q)-t.y;
+}
+
+// https://iquilezles.org/articles/distfunctions/
+
+float sdfl_builtin_smoothUnion(float d1, float d2, float k) {
+    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) - k*h*(1.0-h);
+}
+
+float sdfl_builtin_smoothSubtraction(float d1, float d2, float k) {
+    float h = clamp( 0.5 - 0.5*(d2+d1)/k, 0.0, 1.0 );
+    return mix( d2, -d1, h ) + k*h*(1.0-h);
+}
+
+float sdfl_builtin_smoothIntersection(float d1, float d2, float k) {
+    float h = clamp( 0.5 - 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) + k*h*(1.0-h);
 }
 
 mat3 sdfl_RotationMatrix(vec3 angles) {
@@ -363,7 +428,6 @@ mat3 sdfl_RotationMatrix(vec3 angles) {
         -sy,   cy*sx,            cx*cy
     );
 }
-
 `
 	generateFragmentCode(code)
 	generateComputeCode(code)
