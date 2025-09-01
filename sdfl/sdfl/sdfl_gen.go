@@ -137,8 +137,12 @@ func undoFreshVar(base string) {
 
 func (funCall *FunCall) generate(args ...any) {
 	rayPosition := "p"
+	parentIsOp := false
 	if len(args) > 0 {
 		rayPosition = args[0].(string)
+		if len(args) > 1 {
+			parentIsOp = args[1].(bool)
+		}
 	}
 
 	funDef, ok := functionSymbols[funCall.Id]
@@ -198,15 +202,15 @@ func (funCall *FunCall) generate(args ...any) {
 			generateCodeBoth(";\n")
 
 			// recurse with qVar instead of p
-			childExpr.Expr.FunCall.generate(qVar)
+			childExpr.Expr.FunCall.generate(qVar, parentIsOp)
 		case FUN_BUILTIN_OP:
 			exprs := orderedArgs()
 			// child1
 			println(rayPosition)
-			exprs[0].FunCall.generate(rayPosition)
+			exprs[0].FunCall.generate(rayPosition, true)
 			// child2
 			println(rayPosition)
-			exprs[1].FunCall.generate(rayPosition)
+			exprs[1].FunCall.generate(rayPosition, true)
 			sd := freshVar("sd")
 			generateCodeBoth("    float %s = %s(", sd, genFunCall(funDef.Id))
 			undoFreshVar("sd")
@@ -242,11 +246,13 @@ func (funCall *FunCall) generate(args ...any) {
 			}
 			generateCodeBoth(");\n")
 
-			generateCodeBoth("    d = %s(", "sdfl_PushScene")
-			undoFreshVar("sd")
-			sd = freshVar("sd")
-			generateCodeBoth(sd)
-			generateCodeBoth(");\n")
+			if !parentIsOp {
+				generateCodeBoth("    d = %s(", "sdfl_PushScene")
+				undoFreshVar("sd")
+				sd = freshVar("sd")
+				generateCodeBoth(sd)
+				generateCodeBoth(");\n")
+			}
 		default:
 			fmt.Println("NOT IMPLEMENTED YET!")
 		}
