@@ -129,13 +129,7 @@ func freshVar(base string) string {
 	return name
 }
 
-func undoFreshVar(base string) {
-	if varCounters[base] > 0 {
-		varCounters[base]--
-	}
-}
-
-func (funCall *FunCall) generate(args ...any) {
+func (funCall *FunCall) generate(args ...any) string {
 	rayPosition := "p"
 	parentIsOp := false
 	if len(args) > 0 {
@@ -148,114 +142,104 @@ func (funCall *FunCall) generate(args ...any) {
 	funDef, ok := functionSymbols[funCall.Id]
 	println(funCall.Id, funDef.SymbolType, rayPosition)
 
-	if ok {
+	if !ok {
+		return ""
+	}
 
-		orderedArgs := func() []*Expr {
-			exprs := []*Expr{}
-			// figure out named parameter order
-			for j := 0; j < len(funDef.FunDefArgNames); j++ {
-				funNamedArg, ok := funCall.FunNamedArgs[funDef.FunDefArgNames[j]]
-				if !ok {
-					// TODO: better error messages
-					fmt.Println("ERROR!")
-				}
-				if funDef.FunDefArgNames[j] == funNamedArg.ArgName {
-					exprs = append(exprs, &funNamedArg.Expr)
-				}
+	orderedArgs := func() []*Expr {
+		exprs := []*Expr{}
+		// figure out named parameter order
+		for j := 0; j < len(funDef.FunDefArgNames); j++ {
+			funNamedArg, ok := funCall.FunNamedArgs[funDef.FunDefArgNames[j]]
+			if !ok {
+				// TODO: Better error messages
+				fmt.Println("ERROR!")
 			}
-			return exprs
+			if funDef.FunDefArgNames[j] == funNamedArg.ArgName {
+				exprs = append(exprs, &funNamedArg.Expr)
+			}
+		}
+		return exprs
+	}
+
+	genFunCall := func(funId string) string {
+		return "sdfl_builtin_" + funId
+	}
+
+	switch funDef.SymbolType {
+	case FUN_BUILTIN_ROTATE_AROUND:
+		posExpr, okPos := funCall.FunNamedArgs["position"]
+		rotExpr, okRot := funCall.FunNamedArgs["rotation"]
+		childExpr, okChild := funCall.FunNamedArgs["child"]
+
+		if !okPos || !okRot || !okChild {
+			fmt.Println("ERROR: rotateAround missing args (needs position, rotation, child)")
+			return ""
 		}
 
-		genFunCall := func(funId string) string {
-			symbol := "sdfl_builtin_" + funId
-			return symbol
+		qVar := freshVar("q")
+
+		// Generate the rotation transformation code
+		generateCodeBoth(fmt.Sprintf("    vec3 %s = %s - ", qVar, rayPosition))
+		posExpr.Expr.generate()
+		generateCodeBoth(";\n")
+
+		generateCodeBoth(fmt.Sprintf("    %s = sdfl_RotationMatrix(radians(", qVar))
+		rotExpr.Expr.generate()
+		generateCodeBoth(fmt.Sprintf(")) * %s;\n", qVar))
+
+		generateCodeBoth(fmt.Sprintf("    %s += ", qVar))
+		posExpr.Expr.generate()
+		generateCodeBoth(";\n")
+
+		// CRITICAL: Pass the new coordinate system (qVar) to the child
+		// This ensures all nested shapes use the rotated coordinates
+		return childExpr.Expr.FunCall.generate(qVar, parentIsOp)
+
+	case FUN_BUILTIN_OP:
+		exprs := orderedArgs()
+
+		// Both children should use the SAME rayPosition (which might be "p" or "q16" etc)
+		// and both should be marked as parentIsOp=true so they don't call sdfl_PushScene
+		child1Var := exprs[0].FunCall.generate(rayPosition, true)
+		child2Var := exprs[1].FunCall.generate(rayPosition, true)
+
+		sd := freshVar("sd")
+		// Use child1, child2 order to match the expected output
+		// smoothUnion(child1: sphere, child2: rotateAround) -> smoothUnion(child1_var, child2_var)
+		generateCodeBoth(fmt.Sprintf("    float %s = %s(%s, %s, ", sd, genFunCall(funDef.Id), child1Var, child2Var))
+
+		// smooth_transition parameter
+		exprs[2].generate()
+		generateCodeBoth(");\n")
+
+		// Only push to scene if this isn't part of a larger operation
+		if !parentIsOp {
+			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
 		}
+		return sd
 
-		switch funDef.SymbolType {
-		// case FUN_BUILTIN_SCENE:
-		// case FUN_BUILTIN_CAMERA:
-		case FUN_BUILTIN_ROTATE_AROUND:
-			posExpr, okPos := funCall.FunNamedArgs["position"]
-			rotExpr, okRot := funCall.FunNamedArgs["rotation"]
-			childExpr, okChild := funCall.FunNamedArgs["child"]
+	case FUN_BUILTIN:
+		exprs := orderedArgs()
 
-			if !okPos || !okRot || !okChild {
-				fmt.Println("ERROR: rotateAround missing args (needs position, rotation, child)")
-				return
+		sd := freshVar("sd")
+		generateCodeBoth(fmt.Sprintf("    float %s = %s(%s, ", sd, genFunCall(funDef.Id), rayPosition))
+		for i, e := range exprs {
+			e.generate()
+			if i < len(exprs)-1 {
+				generateCodeBoth(", ")
 			}
-
-			qVar := freshVar("q")
-
-			// subtract pivot
-			generateCodeBoth(fmt.Sprintf("    vec3 %s = p - ", qVar))
-			posExpr.Expr.generate()
-			generateCodeBoth(";\n")
-
-			// rotate
-			generateCodeBoth(fmt.Sprintf("    %s = sdfl_RotationMatrix(radians(", qVar))
-			rotExpr.Expr.generate()
-			generateCodeBoth(fmt.Sprintf(")) * %s;\n", qVar))
-
-			// add pivot back
-			generateCodeBoth(fmt.Sprintf("    %s += ", qVar))
-			posExpr.Expr.generate()
-			generateCodeBoth(";\n")
-
-			// recurse with qVar instead of p
-			childExpr.Expr.FunCall.generate(qVar, parentIsOp)
-		case FUN_BUILTIN_OP:
-			exprs := orderedArgs()
-			// child1
-			println(rayPosition)
-			exprs[0].FunCall.generate(rayPosition, true)
-			// child2
-			println(rayPosition)
-			exprs[1].FunCall.generate(rayPosition, true)
-			sd := freshVar("sd")
-			generateCodeBoth("    float %s = %s(", sd, genFunCall(funDef.Id))
-			undoFreshVar("sd")
-			undoFreshVar("sd")
-			sd = freshVar("sd")
-			generateCodeBoth(sd)
-			generateCodeBoth(", ")
-			undoFreshVar("sd")
-			undoFreshVar("sd")
-			sd = freshVar("sd")
-			generateCodeBoth(sd)
-			generateCodeBoth(", ")
-			// smooth_transition
-			exprs[2].generate()
-			generateCodeBoth(");\n")
-
-			generateCodeBoth("    d = %s(", "sdfl_PushScene")
-			sd = freshVar("sd")
-			sd = freshVar("sd")
-			generateCodeBoth(sd)
-			generateCodeBoth(");\n")
-
-		case FUN_BUILTIN:
-			exprs := orderedArgs()
-
-			sd := freshVar("sd")
-			generateCodeBoth("    float %s = %s(%s, ", sd, genFunCall(funDef.Id), rayPosition)
-			for i, e := range exprs {
-				e.generate()
-				if i < len(exprs)-1 {
-					generateCodeBoth(",")
-				}
-			}
-			generateCodeBoth(");\n")
-
-			if !parentIsOp {
-				generateCodeBoth("    d = %s(", "sdfl_PushScene")
-				undoFreshVar("sd")
-				sd = freshVar("sd")
-				generateCodeBoth(sd)
-				generateCodeBoth(");\n")
-			}
-		default:
-			fmt.Println("NOT IMPLEMENTED YET!")
 		}
+		generateCodeBoth(");\n")
+
+		if !parentIsOp {
+			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+		}
+		return sd
+
+	default:
+		fmt.Println("NOT IMPLEMENTED YET!")
+		return ""
 	}
 }
 
