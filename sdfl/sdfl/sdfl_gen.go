@@ -54,6 +54,7 @@ func Generate(prog *Program) {
 
 func (prog *Program) generate(args ...any) {
 	generateGlslFragmentHeader()
+	generateGlslFragmentGetMaterial()
 	generateGlslComputeHeader()
 	generateGlslBuiltinSDFFunctions()
 	sceneCall := prog.Exprs[0].FunCall
@@ -207,7 +208,7 @@ func (funCall *FunCall) generate(args ...any) string {
 		sd := freshVar("sd")
 		// Use child1, child2 order to match the expected output
 		// smoothUnion(child1: sphere, child2: rotateAround) -> smoothUnion(child1_var, child2_var)
-		generateCodeBoth(fmt.Sprintf("    float %s = %s(%s, %s, ", sd, genFunCall(funDef.Id), child1Var, child2Var))
+		generateCodeBoth(fmt.Sprintf("    SceneResult %s = %s(%s, %s, ", sd, genFunCall(funDef.Id), child1Var, child2Var))
 
 		// smooth_transition parameter
 		exprs[2].generate()
@@ -223,14 +224,14 @@ func (funCall *FunCall) generate(args ...any) string {
 		exprs := orderedArgs()
 
 		sd := freshVar("sd")
-		generateCodeBoth(fmt.Sprintf("    float %s = %s(%s, ", sd, genFunCall(funDef.Id), rayPosition))
+		generateCodeBoth(fmt.Sprintf("    SceneResult %s = SceneResult(%s(%s, ", sd, genFunCall(funDef.Id), rayPosition))
 		for i, e := range exprs {
 			e.generate()
 			if i < len(exprs)-1 {
 				generateCodeBoth(", ")
 			}
 		}
-		generateCodeBoth(");\n")
+		generateCodeBoth("), 0);\n")
 
 		if !parentIsOp {
 			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
@@ -272,8 +273,6 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 	generateFragmentCode(";")
 	generateFragmentCode(`
     vec3 ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel
-    
-    float d = sdfl_RayMarch(ray_origin, ray_dir);
 `)
 }
 
@@ -287,10 +286,21 @@ void main() {
 	generateGlslCamera(cameraFunCall)
 
 	generateFragmentCode(`
-    // lightning
-    vec3 p = ray_origin + ray_dir * d;
-    float diff = sdfl_GetLight(p); // diffuse lightning
-    vec3 color = vec3(diff);
+    SceneResult result = sdfl_RayMarch(ray_origin, ray_dir);
+    
+    vec3 color = vec3(0.0);
+    
+    if (result.distance < SDFL_MAX_DISTANCE) {
+        vec3 p = ray_origin + ray_dir * result.distance;
+        vec3 view_dir = -ray_dir;
+        
+        Material mat = sdfl_GetMaterial(result.materialId);
+        color = sdfl_CalculateLighting(p, view_dir, mat);
+    } else {
+        // Background/sky
+        color = mix(vec3(0.5, 0.7, 1.0), vec3(0.2, 0.4, 0.8), uv.y * 0.5 + 0.5);
+    }
+    
     frag_color = vec4(color, 1.0);
 }
 `)
@@ -306,7 +316,7 @@ void main() {
     vec3 p = mix(minBound, maxBound, uv);
 
     // float d = sdSphere(p, 0.3);
-    float d = sdfl_GetDistScene(p);
+    float d = sdfl_GetDistScene(p).distance;
 
     // convert 3D index to 1D
     int index = gid.z * resolution * resolution + gid.y * resolution + gid.x;
@@ -335,6 +345,54 @@ uniform float elapsed_time;
 #define SDFL_MAX_DISTANCE 100.
 #define SDFL_HIT_DISTANCE .01
 #define SDFL_SHADOW_CAST_DISTANCE .05
+
+// material system
+struct Material {
+    vec3 albedo;
+    float roughness;
+    float metallic;
+    vec3 emission;
+};
+
+struct SceneResult {
+    float distance;
+    int materialId;
+};
+`)
+}
+
+func generateGlslFragmentGetMaterial() {
+	generateFragmentCode(`
+Material sdfl_GetMaterial(int id) {
+    Material mat;
+    
+    if (id == 0) { // Default/Ground
+        mat.albedo = vec3(0.8, 0.8, 0.8);
+        mat.roughness = 0.9;
+        mat.metallic = 0.0;
+        mat.emission = vec3(0.0);
+    }
+    else if (id == 1) { // Main object (torus-subtracted sphere)
+        mat.albedo = vec3(0.2, 0.6, 1.0);
+        mat.roughness = 0.3;
+        mat.metallic = 0.1;
+        mat.emission = vec3(0.0);
+    }
+    else if (id == 2) { // Eyes/spheres
+        mat.albedo = vec3(1.0, 0.3, 0.2);
+        mat.roughness = 0.1;
+        mat.metallic = 0.0;
+        mat.emission = vec3(0.1, 0.0, 0.0); // slight red glow
+    }
+    else { // Fallback
+        mat.albedo = vec3(0.5, 0.5, 0.5);
+        mat.roughness = 0.5;
+        mat.metallic = 0.0;
+        mat.emission = vec3(0.0);
+    }
+    
+    return mat;
+}
 `)
 }
 
@@ -356,6 +414,11 @@ uniform vec3 maxBound;
 uniform int resolution;
 
 #define SDFL_MAX_DISTANCE 100.
+
+struct SceneResult {
+    float distance;
+    int materialId;
+};
 `)
 }
 
@@ -388,23 +451,6 @@ float sdfl_builtin_torus(vec3 p, vec3 pos, float radius, float thickness) {
     return length(q)-t.y;
 }
 
-// https://iquilezles.org/articles/distfunctions/
-
-float sdfl_builtin_smoothUnion(float d1, float d2, float k) {
-    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
-    return mix( d2, d1, h ) - k*h*(1.0-h);
-}
-
-float sdfl_builtin_smoothSubtraction(float d1, float d2, float k) {
-    float h = clamp( 0.5 - 0.5*(d2+d1)/k, 0.0, 1.0 );
-    return mix( d2, -d1, h ) + k*h*(1.0-h);
-}
-
-float sdfl_builtin_smoothIntersection(float d1, float d2, float k) {
-    float h = clamp( 0.5 - 0.5*(d2-d1)/k, 0.0, 1.0 );
-    return mix( d2, d1, h ) + k*h*(1.0-h);
-}
-
 mat3 sdfl_RotationMatrix(vec3 angles) {
     // angles = (rx, ry, rz) in radians
     float cx = cos(angles.x), sx = sin(angles.x);
@@ -418,6 +464,28 @@ mat3 sdfl_RotationMatrix(vec3 angles) {
         -sy,   cy*sx,            cx*cy
     );
 }
+// https://iquilezles.org/articles/distfunctions/
+
+SceneResult sdfl_builtin_smoothUnion(SceneResult d1, SceneResult d2, float k) {
+    float h = clamp(0.5 + 0.5*(d2.distance-d1.distance)/k, 0.0, 1.0);
+    float dist = mix(d2.distance, d1.distance, h) - k*h*(1.0-h);
+    int matId = (h > 0.5) ? d1.materialId : d2.materialId;
+    return SceneResult(dist, matId);
+}
+
+SceneResult sdfl_builtin_smoothSubtraction(SceneResult d1, SceneResult d2, float k) {
+    float h = clamp(0.5 - 0.5*(d2.distance+d1.distance)/k, 0.0, 1.0);
+    float dist = mix(d2.distance, -d1.distance, h) + k*h*(1.0-h);
+    // For subtraction, keep the material of the object being subtracted from
+    return SceneResult(dist, d2.materialId);
+}
+
+SceneResult sdfl_builtin_smoothIntersection(SceneResult d1, SceneResult d2, float k) {
+    float h = clamp(0.5 - 0.5*(d2.distance-d1.distance)/k, 0.0, 1.0);
+    float dist = mix(d2.distance, d1.distance, h) + k*h*(1.0-h);
+    int matId = (h > 0.5) ? d1.materialId : d2.materialId;
+    return SceneResult(dist, matId);
+}
 `
 	generateFragmentCode(code)
 	generateComputeCode(code)
@@ -425,68 +493,96 @@ mat3 sdfl_RotationMatrix(vec3 angles) {
 
 func generateGlslRaymarchEngine() {
 	generateFragmentCode(`
-float sdfl_RayMarch(vec3 ray_origin, vec3 ray_dir) {
-    float dfo = 0.; // distance from ray origin
+SceneResult sdfl_RayMarch(vec3 ray_origin, vec3 ray_dir) {
+    float dfo = 0.;
+    SceneResult result = SceneResult(SDFL_MAX_DISTANCE, 0);
 
     for (int i = 0; i < SDFL_MAX_STEPS; i++) {
         vec3 p = ray_origin + ray_dir * dfo;
         
-        float ds = sdfl_GetDistScene(p); // distance to the scene
-        dfo += ds;
+        SceneResult scene = sdfl_GetDistScene(p);
+        dfo += scene.distance;
+        result.materialId = scene.materialId;
 
-        if (dfo > SDFL_MAX_DISTANCE || ds < SDFL_HIT_DISTANCE) break;
+        if (dfo > SDFL_MAX_DISTANCE || scene.distance < SDFL_HIT_DISTANCE) {
+            break;
+        }
     }
-
-    return dfo;
+    
+    result.distance = dfo;
+    return result;
 }
 
 vec3 sdfl_GetNormal(vec3 p) {
-    float d = sdfl_GetDistScene(p);
+    float d = sdfl_GetDistScene(p).distance;
     vec2 off = vec2(.01, 0.);
 
     vec3 normal = vec3(
-        d - sdfl_GetDistScene(p - off.xyy),
-        d - sdfl_GetDistScene(p - off.yxy),
-        d - sdfl_GetDistScene(p - off.yyx)
+        d - sdfl_GetDistScene(p - off.xyy).distance,
+        d - sdfl_GetDistScene(p - off.yxy).distance,
+        d - sdfl_GetDistScene(p - off.yyx).distance
     );
 
     return normalize(normal);
 }
 
-float sdfl_GetLight(vec3 p) {
-    vec3 light_pos = vec3(0, 8, 3);
-    // light_pos.xz += vec2(sin(elapsed_time * 0.1), cos(elapsed_time * 0.1)) * 2;
+float sdfl_GetShadow(vec3 p, vec3 light_dir, float light_distance) {
+    SceneResult result = sdfl_RayMarch(p + sdfl_GetNormal(p) * SDFL_SHADOW_CAST_DISTANCE, light_dir);
+    return (result.distance < light_distance) ? 0.1 : 1.0;
+}
+
+vec3 sdfl_CalculateLighting(vec3 p, vec3 view_dir, Material mat) {
+    vec3 light_pos = vec3(0, 8, 8);
+    vec3 light_color = vec3(1.0, 0.95, 0.8);
+    float light_intensity = 2.0;
+    
     vec3 light_dir = normalize(light_pos - p);
-    vec3 normal_p = sdfl_GetNormal(p);
-
-    float diff = clamp(dot(normal_p, light_dir), 0., 1.); // diffuse lightning, clamp it because dot gives between -1 and 1
-
-    // shadows
-    float d = sdfl_RayMarch(p + normal_p*SDFL_SHADOW_CAST_DISTANCE, light_dir);
-    if (d < distance(light_pos, p)) {
-        diff *= 0.1;
-    }
-
-    return diff;
+    vec3 normal = sdfl_GetNormal(p);
+    vec3 half_dir = normalize(light_dir + view_dir);
+    
+    float light_distance = distance(light_pos, p);
+    float attenuation = 1.0 / (1.0 + 0.1 * light_distance + 0.01 * light_distance * light_distance);
+    
+    // Diffuse
+    float ndotl = max(dot(normal, light_dir), 0.0);
+    vec3 diffuse = mat.albedo * light_color * ndotl * light_intensity * attenuation;
+    
+    // Specular (simplified)
+    float ndoth = max(dot(normal, half_dir), 0.0);
+    float roughness2 = mat.roughness * mat.roughness;
+    float spec_power = 2.0 / (roughness2 * roughness2) - 2.0;
+    vec3 specular = mix(vec3(0.04), mat.albedo, mat.metallic) * 
+                   light_color * pow(ndoth, spec_power) * light_intensity * attenuation;
+    
+    // Shadow
+    float shadow = sdfl_GetShadow(p, light_dir, light_distance);
+    
+    // Ambient
+    vec3 ambient = mat.albedo * 0.1;
+    
+    return ambient + (diffuse + specular) * shadow + mat.emission;
 }
 `)
 }
 
 func generateGlslDistSceneBegin() {
 	code := `
-float _scene_dist = SDFL_MAX_DISTANCE;
+SceneResult _scene_result = SceneResult(SDFL_MAX_DISTANCE, 0);
 
-float sdfl_PushScene(float d) {
-    _scene_dist = min(_scene_dist, d);
-    return _scene_dist;
+SceneResult sdfl_PushScene(SceneResult sr) {
+    if (sr.distance < _scene_result.distance) {
+        _scene_result.distance = sr.distance;
+        _scene_result.materialId = sr.materialId;
+    }
+    return _scene_result;
 }
 
-float sdfl_GetDistScene(vec3 p) {
+SceneResult sdfl_GetDistScene(vec3 p) {
     // reset
-    _scene_dist = SDFL_MAX_DISTANCE;
+    _scene_result = SceneResult(SDFL_MAX_DISTANCE, 0);
+    
+	SceneResult d;
 
-    // generated sdf shapes
-    float d;
 `
 	generateFragmentCode(code)
 	generateComputeCode(code)
