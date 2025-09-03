@@ -13,6 +13,9 @@ var functionSymbols = map[string]FunDef{
 	"smoothUnion":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothUnion", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
 	"smoothSubtraction":  {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothSubtraction", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
 	"smoothIntersection": {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothIntersection", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
+	"union":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "union", FunDefArgNames: []string{"child1", "child2"}},
+	"subtraction":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "subtraction", FunDefArgNames: []string{"child1", "child2"}},
+	"intersection":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "intersection", FunDefArgNames: []string{"child1", "child2"}},
 }
 
 var generatedCodeFragmentShader = ""
@@ -208,10 +211,13 @@ func (funCall *FunCall) generate(args ...any) string {
 		sd := freshVar("sd")
 		// Use child1, child2 order to match the expected output
 		// smoothUnion(child1: sphere, child2: rotateAround) -> smoothUnion(child1_var, child2_var)
-		generateCodeBoth(fmt.Sprintf("    SceneResult %s = %s(%s, %s, ", sd, genFunCall(funDef.Id), child1Var, child2Var))
+		generateCodeBoth(fmt.Sprintf("    SceneResult %s = %s(%s, %s", sd, genFunCall(funDef.Id), child1Var, child2Var))
 
 		// smooth_transition parameter
-		exprs[2].generate()
+		if len(exprs) > 2 {
+			generateCodeBoth(", ")
+			exprs[2].generate()
+		}
 		generateCodeBoth(");\n")
 
 		// Only push to scene if this isn't part of a larger operation
@@ -464,6 +470,28 @@ mat3 sdfl_RotationMatrix(vec3 angles) {
         -sy,   cy*sx,            cx*cy
     );
 }
+
+SceneResult sdfl_builtin_union(SceneResult d1, SceneResult d2) {
+    if (d1.distance < d2.distance) {
+        return SceneResult(d1.distance, d1.materialId);
+    } else {
+        return SceneResult(d2.distance, d2.materialId);
+    }
+}
+
+SceneResult sdfl_builtin_subtraction(SceneResult d1, SceneResult d2) {
+    float dist = max(d2.distance, -d1.distance);
+    return SceneResult(dist, d2.materialId);
+}
+
+SceneResult sdfl_builtin_intersection(SceneResult d1, SceneResult d2) {
+    if (d1.distance > d2.distance) {
+        return SceneResult(d1.distance, d1.materialId);
+    } else {
+        return SceneResult(d2.distance, d2.materialId);
+    }
+}
+
 // https://iquilezles.org/articles/distfunctions/
 
 SceneResult sdfl_builtin_smoothUnion(SceneResult d1, SceneResult d2, float k) {
@@ -527,8 +555,31 @@ vec3 sdfl_GetNormal(vec3 p) {
 }
 
 float sdfl_GetShadow(vec3 p, vec3 light_dir, float light_distance) {
-    SceneResult result = sdfl_RayMarch(p + sdfl_GetNormal(p) * SDFL_SHADOW_CAST_DISTANCE, light_dir);
-    return (result.distance < light_distance) ? 0.1 : 1.0;
+    float shadow = 1.0;
+    float penumbra_factor = 10.0; // higher values = sharper shadows
+    
+    vec3 start_pos = p + sdfl_GetNormal(p) * SDFL_SHADOW_CAST_DISTANCE;
+    float t = 0.0;
+    
+    for(int i = 0; i < 32; ++i) {
+        vec3 ray_pos = start_pos + light_dir * t;
+        SceneResult result = sdfl_GetDistScene(ray_pos);
+        
+        if(result.distance + SDFL_SHADOW_CAST_DISTANCE < SDFL_SHADOW_CAST_DISTANCE) {
+            return 0.1; // hard shadow
+        }
+        
+        // calculate soft shadow contribution
+        shadow = min(shadow, penumbra_factor * result.distance / t);
+        
+        t += result.distance;
+        
+        if(t >= light_distance) {
+            break;
+        }
+    }
+    
+    return clamp(shadow, 0.1, 1.0);
 }
 
 vec3 sdfl_CalculateLighting(vec3 p, vec3 view_dir, Material mat) {
