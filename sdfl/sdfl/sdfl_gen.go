@@ -93,6 +93,19 @@ func (prog *Program) generate(args ...any) {
 		return
 	}
 
+	backgroundStr := "vec3(0, 0, 0)"
+	if _, ok := sceneCall.FunNamedArgs["background"]; ok {
+		if sceneCall.FunNamedArgs["background"].Expr.Tuple != nil {
+			r := sceneCall.FunNamedArgs["background"].Expr.Tuple.Values[0]
+			g := sceneCall.FunNamedArgs["background"].Expr.Tuple.Values[1]
+			b := sceneCall.FunNamedArgs["background"].Expr.Tuple.Values[2]
+			backgroundStr = fmt.Sprintf("vec3(%s, %s, %s)", r, g, b)
+		} else {
+			fmt.Println("ERROR: scene function had argument background as tuple")
+			return
+		}
+	}
+
 	generateGlslDistSceneBegin()
 	for _, expr := range childrenArr.Exprs {
 		expr.generate()
@@ -101,7 +114,7 @@ func (prog *Program) generate(args ...any) {
 
 	generateGlslRaymarchEngine()
 
-	generateGlslFragmentMain(cameraCall)
+	generateGlslFragmentMain(cameraCall, backgroundStr)
 	generateGlslComputeMain()
 }
 
@@ -282,7 +295,7 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 `)
 }
 
-func generateGlslFragmentMain(cameraFunCall *FunCall) {
+func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
 	generateFragmentCode(`
 void main() {
     vec2 uv = o_vertex_uv * 2. - 1.;
@@ -304,12 +317,12 @@ void main() {
         color = sdfl_CalculateLighting(p, view_dir, mat);
     } else {
         // Background/sky
-        color = mix(vec3(0.5, 0.7, 1.0), vec3(0.2, 0.4, 0.8), uv.y * 0.5 + 0.5);
+        color = mix(vec3(0.5, 0.7, 1.0), %s, uv.y * 0.5 + 0.5);
     }
     
     frag_color = vec4(color, 1.0);
 }
-`)
+`, bg)
 }
 
 func generateGlslComputeMain() {
