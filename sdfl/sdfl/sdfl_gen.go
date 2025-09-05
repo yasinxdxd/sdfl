@@ -8,6 +8,7 @@ var functionSymbols = map[string]FunDef{
 	"camera":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
 	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
 	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
+	"ellipsoid":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "ellipsoid", FunDefArgNames: []string{"position", "radius"}},
 	"box":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
 	"torus":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "torus", FunDefArgNames: []string{"position", "radius", "thickness"}},
 	"rotateAround":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_ROTATE_AROUND, Id: "rotateAround", FunDefArgNames: []string{"position", "rotation", "child"}},
