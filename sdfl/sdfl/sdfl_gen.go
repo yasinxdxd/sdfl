@@ -63,7 +63,7 @@ func (prog *Program) generate(args ...any) {
 	generateGlslBuiltinSDFFunctions()
 
 	sceneCall := prog.Expr.FunCall
-	if sceneCall.Id != "scene" {
+	if sceneCall == nil || sceneCall.Id != "scene" {
 		fmt.Println("ERROR: scene function must be called")
 		return
 	}
@@ -137,9 +137,9 @@ func (stmt *Stmt) generate(args ...any) {
 func (funDef *FunDef) generate(args ...any) {
 	// TODO: get arguments
 	generateCodeBoth("\nfloat %s(%s) {\n", funDef.Id, "vec3 p")
-	generateCodeBoth("    SceneResult d;\n")
+	generateCodeBoth("    SceneResult d = SceneResult(SDFL_MAX_DISTANCE, 0);\n")
 	localCall := funDef.Expr.FunCall
-	if localCall.Id != "local" {
+	if localCall == nil || localCall.Id != "local" {
 		fmt.Println("ERROR: local function must be called in a function definition")
 		return
 	}
