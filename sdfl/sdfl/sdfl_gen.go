@@ -4,6 +4,7 @@ import "fmt"
 
 var functionSymbols = map[string]FunDef{
 	"scene":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
+	"local":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_LOCAL, Id: "local", FunDefArgNames: []string{"children"}},
 	"camera":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
 	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
 	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
@@ -60,7 +61,12 @@ func (prog *Program) generate(args ...any) {
 	generateGlslFragmentGetMaterial()
 	generateGlslComputeHeader()
 	generateGlslBuiltinSDFFunctions()
-	sceneCall := prog.Exprs[0].FunCall
+
+	for _, stmt := range prog.Stmts {
+		stmt.generate()
+	}
+
+	sceneCall := prog.Expr.FunCall
 	if sceneCall.Id != "scene" {
 		fmt.Println("ERROR: scene function must be called")
 		return
@@ -116,6 +122,35 @@ func (prog *Program) generate(args ...any) {
 
 	generateGlslFragmentMain(cameraCall, backgroundStr)
 	generateGlslComputeMain()
+}
+
+func (stmt *Stmt) generate(args ...any) {
+	switch stmt.Type {
+	case AST_FUN_DEF:
+		stmt.FunDef.generate()
+	default:
+		fmt.Printf("gen error: unknown stmt type: %v\n", stmt.Type)
+	}
+}
+
+func (funDef *FunDef) generate(args ...any) {
+	// TODO: get arguments
+	generateCodeBoth("SceneResult %s() {", funDef.Id)
+	localCall := funDef.Expr.FunCall
+	if localCall.Id != "local" {
+		fmt.Println("ERROR: local function must be called in a function definition")
+		return
+	}
+	if _, ok := localCall.FunNamedArgs["children"]; !ok {
+		fmt.Println("ERROR: local function had argument children")
+		return
+	}
+	childrenArr := localCall.FunNamedArgs["children"].Expr.ArrExpr
+	if childrenArr == nil {
+		fmt.Println("ERROR: local, children argument is empty")
+		return
+	}
+	generateCodeBoth("}")
 }
 
 func (expr *Expr) generate(args ...any) {

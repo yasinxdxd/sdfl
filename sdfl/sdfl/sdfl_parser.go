@@ -69,6 +69,29 @@ func (p *Parser) IsThereError() bool {
 	return p.err
 }
 
+func (p *Parser) ParseFunDef() FunDef {
+	p.eat(KW_DEF)
+	_, tok := p.eat(KW_ID)
+	funName := tok.Value
+	p.eat(PUNC_LPAREN)
+	funDefArgNames := []string{}
+	for p.current().Kind != PUNC_RPAREN {
+		_, tok := p.eat(KW_ID)
+		funDefArgNames = append(funDefArgNames, tok.Value)
+		if p.current().Kind != PUNC_RPAREN {
+			p.eat(PUNC_COMMA)
+		}
+	}
+	p.eat(PUNC_RPAREN)
+	p.eat(PUNC_LCURLY)
+	expr := p.ParseExpr()
+	p.eat(PUNC_RCURLY)
+
+	funDef := FunDef{Type: AST_FUN_DEF, SymbolType: FUN_USER_DEFINED, Id: funName, FunDefArgNames: funDefArgNames, Expr: &expr}
+	functionSymbols[funName] = funDef
+	return funDef
+}
+
 func (p *Parser) ParseFunNamedArg() FunNamedArg {
 	_, tok := p.eat(KW_ID)
 	argName := tok.Value
@@ -169,13 +192,30 @@ func (p *Parser) ParseExpr() Expr {
 	return expr
 }
 
+func (p *Parser) ParseStmt() Stmt {
+	stmt := Stmt{}
+	if p.current().Kind == KW_DEF {
+		stmt.Type = AST_FUN_DEF
+		fundef := p.ParseFunDef()
+		stmt.FunDef = &fundef
+	}
+
+	return stmt
+}
+
 func (p *Parser) Parse() Program {
+	stmts := []Stmt{}
+	for p.current().Kind == KW_DEF || p.current().Kind == KW_LET {
+		stmt := p.ParseStmt()
+		stmts = append(stmts, stmt)
+	}
+
 	expr := p.ParseExpr()
 
 	if !p.err {
 		println("DONE!")
 	}
 
-	program := Program{Type: AST_PROGRAM, Exprs: []Expr{expr}}
+	program := Program{Type: AST_PROGRAM, Expr: expr, Stmts: stmts}
 	return program
 }

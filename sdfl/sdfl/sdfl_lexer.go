@@ -10,6 +10,7 @@ type TokenType int
 const (
 	EOF    TokenType = -1
 	KW_LET TokenType = iota
+	KW_DEF
 	KW_ID
 	NUMBER_FLOAT
 	NUMBER_INT
@@ -22,6 +23,8 @@ const (
 	PUNC_RPAREN
 	PUNC_LSQUARE
 	PUNC_RSQUARE
+	PUNC_LCURLY
+	PUNC_RCURLY
 	PUNC_COLON
 	PUNC_COMMA
 	WS
@@ -30,6 +33,7 @@ const (
 var TokenName = map[TokenType]string{
 	EOF:          "EOF",
 	KW_LET:       "KW_LET",
+	KW_DEF:       "KW_DEF",
 	KW_ID:        "KW_ID",
 	NUMBER_FLOAT: "NUMBER_FLOAT",
 	NUMBER_INT:   "NUMBER_INT",
@@ -42,6 +46,8 @@ var TokenName = map[TokenType]string{
 	PUNC_RPAREN:  "PUNC_RPAREN",
 	PUNC_LSQUARE: "PUNC_LSQUARE",
 	PUNC_RSQUARE: "PUNC_RSQUARE",
+	PUNC_LCURLY:  "PUNC_LCURLY",
+	PUNC_RCURLY:  "PUNC_RCURLY",
 	PUNC_COLON:   "PUNC_COLON",
 	PUNC_COMMA:   "PUNC_COMMA",
 	WS:           "WS",
@@ -66,6 +72,10 @@ func InitRules() {
 	reg_KW_LET := regexp.MustCompile(`let`)
 	if reg_KW_LET != nil {
 		rules = append(rules, Rule{kind: KW_LET, regex: *reg_KW_LET, skipable: false})
+	}
+	reg_KW_DEF := regexp.MustCompile(`def`)
+	if reg_KW_DEF != nil {
+		rules = append(rules, Rule{kind: KW_DEF, regex: *reg_KW_DEF, skipable: false})
 	}
 	reg_KW_ID := regexp.MustCompile(`[a-zA-Z_][a-zA-Z_0-9]*`)
 	if reg_KW_ID != nil {
@@ -114,6 +124,14 @@ func InitRules() {
 	reg_PUNC_RSQUARE := regexp.MustCompile(`[]]`)
 	if reg_PUNC_RSQUARE != nil {
 		rules = append(rules, Rule{kind: PUNC_RSQUARE, regex: *reg_PUNC_RSQUARE, skipable: false})
+	}
+	reg_PUNC_LCURLY := regexp.MustCompile(`[{]`)
+	if reg_PUNC_LCURLY != nil {
+		rules = append(rules, Rule{kind: PUNC_LCURLY, regex: *reg_PUNC_LCURLY, skipable: false})
+	}
+	reg_PUNC_RCURLY := regexp.MustCompile(`[}]`)
+	if reg_PUNC_RCURLY != nil {
+		rules = append(rules, Rule{kind: PUNC_RCURLY, regex: *reg_PUNC_RCURLY, skipable: false})
 	}
 	reg_PUNC_COLON := regexp.MustCompile(`:`)
 	if reg_PUNC_COLON != nil {
