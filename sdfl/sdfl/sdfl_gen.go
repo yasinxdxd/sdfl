@@ -62,10 +62,6 @@ func (prog *Program) generate(args ...any) {
 	generateGlslComputeHeader()
 	generateGlslBuiltinSDFFunctions()
 
-	for _, stmt := range prog.Stmts {
-		stmt.generate()
-	}
-
 	sceneCall := prog.Expr.FunCall
 	if sceneCall.Id != "scene" {
 		fmt.Println("ERROR: scene function must be called")
@@ -112,6 +108,11 @@ func (prog *Program) generate(args ...any) {
 		}
 	}
 
+	generateGlslPushScene()
+	for _, stmt := range prog.Stmts {
+		stmt.generate()
+	}
+
 	generateGlslDistSceneBegin()
 	for _, expr := range childrenArr.Exprs {
 		expr.generate()
@@ -135,7 +136,8 @@ func (stmt *Stmt) generate(args ...any) {
 
 func (funDef *FunDef) generate(args ...any) {
 	// TODO: get arguments
-	generateCodeBoth("SceneResult %s() {", funDef.Id)
+	generateCodeBoth("\nfloat %s(%s) {\n", funDef.Id, "vec3 p")
+	generateCodeBoth("    SceneResult d;\n")
 	localCall := funDef.Expr.FunCall
 	if localCall.Id != "local" {
 		fmt.Println("ERROR: local function must be called in a function definition")
@@ -150,7 +152,13 @@ func (funDef *FunDef) generate(args ...any) {
 		fmt.Println("ERROR: local, children argument is empty")
 		return
 	}
-	generateCodeBoth("}")
+
+	for _, expr := range childrenArr.Exprs {
+		expr.generate()
+	}
+
+	generateCodeBoth("    return d.distance;\n")
+	generateCodeBoth("}\n")
 }
 
 func (expr *Expr) generate(args ...any) {
@@ -284,6 +292,24 @@ func (funCall *FunCall) generate(args ...any) string {
 			if i < len(exprs)-1 {
 				generateCodeBoth(", ")
 			}
+		}
+		generateCodeBoth("), 0);\n")
+
+		if !parentIsOp {
+			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+		}
+		return sd
+
+	case FUN_USER_DEFINED:
+		exprs := orderedArgs()
+
+		sd := freshVar("sd")
+		generateCodeBoth(fmt.Sprintf("    SceneResult %s = SceneResult(%s(%s", sd, funDef.Id, rayPosition))
+		for i, e := range exprs {
+			if i < len(exprs)-1 {
+				generateCodeBoth(", ")
+			}
+			e.generate()
 		}
 		generateCodeBoth("), 0);\n")
 
@@ -664,7 +690,7 @@ vec3 sdfl_CalculateLighting(vec3 p, vec3 view_dir, Material mat) {
 `)
 }
 
-func generateGlslDistSceneBegin() {
+func generateGlslPushScene() {
 	code := `
 SceneResult _scene_result = SceneResult(SDFL_MAX_DISTANCE, 0);
 
@@ -674,8 +700,13 @@ SceneResult sdfl_PushScene(SceneResult sr) {
         _scene_result.materialId = sr.materialId;
     }
     return _scene_result;
+}	
+`
+	generateCodeBoth(code)
 }
 
+func generateGlslDistSceneBegin() {
+	code := `
 SceneResult sdfl_GetDistScene(vec3 p) {
     // reset
     _scene_result = SceneResult(SDFL_MAX_DISTANCE, 0);
@@ -683,8 +714,7 @@ SceneResult sdfl_GetDistScene(vec3 p) {
 	SceneResult d;
 
 `
-	generateFragmentCode(code)
-	generateComputeCode(code)
+	generateCodeBoth(code)
 }
 
 func generateGlslDistSceneEnd() {
@@ -692,6 +722,5 @@ func generateGlslDistSceneEnd() {
     return d;
 }
 `
-	generateFragmentCode(code)
-	generateComputeCode(code)
+	generateCodeBoth(code)
 }
