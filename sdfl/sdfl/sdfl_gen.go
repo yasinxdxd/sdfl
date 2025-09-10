@@ -6,11 +6,11 @@ var functionSymbols = map[string]FunDef{
 	"scene":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
 	"local":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_LOCAL, Id: "local", FunDefArgNames: []string{"children"}},
 	"camera":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
-	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "plane", FunDefArgNames: []string{"height"}},
-	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
-	"ellipsoid":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "ellipsoid", FunDefArgNames: []string{"position", "radius"}},
-	"box":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "box", FunDefArgNames: []string{"position", "size"}},
-	"torus":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN, Id: "torus", FunDefArgNames: []string{"position", "radius", "thickness"}},
+	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "plane", FunDefArgNames: []string{"height"}},
+	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
+	"ellipsoid":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "ellipsoid", FunDefArgNames: []string{"position", "radius"}},
+	"box":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "box", FunDefArgNames: []string{"position", "size"}},
+	"torus":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "torus", FunDefArgNames: []string{"position", "radius", "thickness"}},
 	"rotateAround":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_ROTATE_AROUND, Id: "rotateAround", FunDefArgNames: []string{"position", "rotation", "child"}},
 	"smoothUnion":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothUnion", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
 	"smoothSubtraction":  {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "smoothSubtraction", FunDefArgNames: []string{"child1", "child2", "smooth_transition"}},
@@ -18,6 +18,29 @@ var functionSymbols = map[string]FunDef{
 	"union":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "union", FunDefArgNames: []string{"child1", "child2"}},
 	"subtraction":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "subtraction", FunDefArgNames: []string{"child1", "child2"}},
 	"intersection":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "intersection", FunDefArgNames: []string{"child1", "child2"}},
+	"noise":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SDFL, Id: "noise", FunDefArgNames: []string{}},
+	"hash":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SDFL, Id: "hash", FunDefArgNames: []string{}},
+	"radians":            {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "radians", FunDefArgNames: []string{"val"}},
+	"degrees":            {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "degrees", FunDefArgNames: []string{"val"}},
+	"sin":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "sin", FunDefArgNames: []string{"val"}},
+	"cos":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "cos", FunDefArgNames: []string{"val"}},
+	"tan":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "tan", FunDefArgNames: []string{"val"}},
+	"asin":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "asin", FunDefArgNames: []string{"val"}},
+	"acos":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "acos", FunDefArgNames: []string{"val"}},
+	"atan":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "atan", FunDefArgNames: []string{"val"}},
+	"sinh":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "sinh", FunDefArgNames: []string{"val"}},
+	"cosh":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "cosh", FunDefArgNames: []string{"val"}},
+	"tanh":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "tanh", FunDefArgNames: []string{"val"}},
+	"asinh":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "asinh", FunDefArgNames: []string{"val"}},
+	"acosh":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "acosh", FunDefArgNames: []string{"val"}},
+	"atanh":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "atanh", FunDefArgNames: []string{"val"}},
+	"pow":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "pow", FunDefArgNames: []string{"val", "exp"}},
+	"exp":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "exp", FunDefArgNames: []string{"val"}},
+	"log":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "log", FunDefArgNames: []string{"val"}},
+	"exp2":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "exp2", FunDefArgNames: []string{"val"}},
+	"log2":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "log2", FunDefArgNames: []string{"val"}},
+	"sqrt":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "sqrt", FunDefArgNames: []string{"val"}},
+	"inversesqrt":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "inversesqrt", FunDefArgNames: []string{"val"}},
 }
 
 var generatedCodeFragmentShader = ""
@@ -283,7 +306,7 @@ func (funCall *FunCall) generate(args ...any) string {
 		}
 		return sd
 
-	case FUN_BUILTIN:
+	case FUN_BUILTIN_SHAPE:
 		exprs := orderedArgs()
 
 		sd := freshVar("sd")
@@ -318,6 +341,19 @@ func (funCall *FunCall) generate(args ...any) string {
 			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
 		}
 		return sd
+
+	case FUN_BUILTIN_SDFL:
+		exprs := orderedArgs()
+
+		generateCodeBoth(fmt.Sprintf("%s(%s.xy", genFunCall(funDef.Id), rayPosition))
+		for i, e := range exprs {
+			if i < len(exprs)-1 {
+				generateCodeBoth(", ")
+			}
+			e.generate()
+		}
+		generateCodeBoth(")")
+		return ""
 
 	default:
 		fmt.Println("NOT IMPLEMENTED YET!")
@@ -588,6 +624,38 @@ SceneResult sdfl_builtin_smoothIntersection(SceneResult d1, SceneResult d2, floa
     float dist = mix(d2.distance, d1.distance, h) + k*h*(1.0-h);
     int matId = (h > 0.5) ? d1.materialId : d2.materialId;
     return SceneResult(dist, matId);
+}
+
+float sdfl_builtin_hash(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float sdfl_builtin_noise_simple(vec2 point) {
+    vec2 p = fract(point);
+    p = smoothstep(0., 1., p);
+    vec2 id = floor(point);
+
+    vec2 off = vec2(1., 0.);
+    vec2 bl = id + off.yy;
+    vec2 br = id + off.xy;
+    vec2 tl = id + off.yx;
+    vec2 tr = id + off.xx;
+
+    float b = mix(sdfl_builtin_hash(bl), sdfl_builtin_hash(br), p.x);
+    float t = mix(sdfl_builtin_hash(tl), sdfl_builtin_hash(tr), p.x);
+
+    float val = mix(b, t, p.y);
+    return val;
+}
+
+float sdfl_builtin_noise(vec2 point) {
+    float noise = sdfl_builtin_noise_simple(point) * 
+    + sdfl_builtin_noise_simple(point*4.) * 0.5
+    + sdfl_builtin_noise_simple(point*8.) * 0.25
+    + sdfl_builtin_noise_simple(point*16.) * 0.125
+    + sdfl_builtin_noise_simple(point*32.) * 0.0625
+    + sdfl_builtin_noise_simple(point*64.) * 0.03125;
+	return noise;
 }
 `
 	generateFragmentCode(code)

@@ -69,6 +69,26 @@ func (p *Parser) IsThereError() bool {
 	return p.err
 }
 
+func (p *Parser) isBinOp() bool {
+	switch p.current().Kind {
+	case PUNC_PLUS, PUNC_SUB, PUNC_MULT, PUNC_DIV:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) getOpPrecedence(op TokenType) int {
+	switch op {
+	case PUNC_MULT, PUNC_DIV:
+		return 3
+	case PUNC_PLUS, PUNC_SUB:
+		return 2
+	default:
+		return 0
+	}
+}
+
 func (p *Parser) ParseFunDef() FunDef {
 	p.eat(KW_DEF)
 	_, tok := p.eat(KW_ID)
@@ -180,8 +200,6 @@ func (p *Parser) ParseExpr() Expr {
 			tuple := p.ParseTuple()
 			expr.Type = RuleType(int(AST_TUPLE) + len(tuple.Values))
 			expr.Tuple = &tuple
-		} else if p.lookAhead(1).Kind == NUMBER_INT {
-			// TODO: check lexer part: number int is blocked by float
 		}
 	} else if p.current().Kind == PUNC_LSQUARE {
 		arrExpr := p.ParseArrExpr()
