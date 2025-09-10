@@ -36,7 +36,8 @@ int main(void) {
     glcompiler::compile_and_attach_shaders(shader);
 
 
-    int resolution = 64;
+    int resolution = 256;
+    int workGroupsPerAxis = (resolution + 7) / 8; // ceil
     
     // create SSBO for SDF output
     SSBO sdfBuffer(0); // binding point 0 // inside glsl: layout(std430, binding = 0)
@@ -45,9 +46,9 @@ int main(void) {
     
     Shader* computeShader = new Shader("sdfl/out_compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
     glcompiler::compile_and_attach_shaders(computeShader);
-    Shader::dispatch_compute(computeShader, 8, 8, 8, [&](Shader* shader) {
-        computeShader->set<float, 3>("minBound", -4.0f, -4.0f, -4.0f);
-        computeShader->set<float, 3>("maxBound", 4.0f, 4.0f, 4.0f);
+    Shader::dispatch_compute(computeShader, workGroupsPerAxis, workGroupsPerAxis, workGroupsPerAxis, [&](Shader* shader) {
+        computeShader->set<float, 3>("minBound", -8.0f, -8.0f, -8.0f);
+        computeShader->set<float, 3>("maxBound", 8.0f, 8.0f, 8.0f);
         computeShader->set<int>("resolution", resolution);
     });
     
@@ -60,14 +61,6 @@ int main(void) {
     
     exportSDFToBinary(sdfData, resolution, "testpy/test_sdf_data.bin");
 
-    // for (int z = 0; z < resolution; z++) {
-    //     for (int y = 0; y < resolution; y++) {
-    //         for (int x = 0; x < resolution; x++) {
-    //             int index = z * resolution * resolution + y * resolution + x;
-    //             float sdfValue = sdfData[index];
-    //         }
-    //     }
-    // }
 
 
     FileWatcher fw("sdfl/out_frag.glsl");
