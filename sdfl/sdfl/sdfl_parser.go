@@ -69,26 +69,6 @@ func (p *Parser) IsThereError() bool {
 	return p.err
 }
 
-func (p *Parser) isBinOp() bool {
-	switch p.current().Kind {
-	case PUNC_PLUS, PUNC_SUB, PUNC_MULT, PUNC_DIV:
-		return true
-	default:
-		return false
-	}
-}
-
-func (p *Parser) getOpPrecedence(op TokenType) int {
-	switch op {
-	case PUNC_MULT, PUNC_DIV:
-		return 3
-	case PUNC_PLUS, PUNC_SUB:
-		return 2
-	default:
-		return 0
-	}
-}
-
 func (p *Parser) ParseFunDef() FunDef {
 	p.eat(KW_DEF)
 	_, tok := p.eat(KW_ID)
@@ -147,13 +127,57 @@ func (p *Parser) ParseNumber() Number {
 	return number
 }
 
+func (p *Parser) isTuple() bool {
+	// Save current position
+	savedPos := p.token_idx
+
+	// Skip opening parenthesis
+	p.token_idx++
+
+	// Look for pattern: number/expr, comma, number/expr...
+	foundComma := false
+	parenCount := 0
+
+	for p.token_idx < len(p.Tokens) {
+		tok := p.current()
+
+		if tok.Kind == PUNC_LPAREN {
+			parenCount++
+		} else if tok.Kind == PUNC_RPAREN {
+			if parenCount == 0 {
+				// Found closing paren at our level
+				break
+			}
+			parenCount--
+		} else if tok.Kind == PUNC_COMMA && parenCount == 0 {
+			// Found comma at our parentheses level - this is a tuple
+			foundComma = true
+			break
+		}
+
+		p.token_idx++
+	}
+
+	// Restore position
+	p.token_idx = savedPos
+
+	return foundComma
+}
+
 func (p *Parser) ParseTuple() Tuple {
 	p.eat(PUNC_LPAREN)
 
 	values := []string{}
-	for p.current().Kind == NUMBER_FLOAT {
-		_, tok := p.eat(NUMBER_FLOAT)
-		values = append(values, tok.Value)
+	for p.current().Kind != PUNC_RPAREN {
+		if p.current().Kind == NUMBER_FLOAT {
+			_, tok := p.eat(NUMBER_FLOAT)
+			values = append(values, tok.Value)
+		} else {
+			// for now, still only handle NUMBER_FLOAT in tuples
+			// TODO: extend this to handle expressions later
+			panic("Only number literals supported in tuples currently")
+		}
+
 		if p.current().Kind != PUNC_RPAREN {
 			p.eat(PUNC_COMMA)
 		}
@@ -182,7 +206,56 @@ func (p *Parser) ParseArrExpr() ArrExpr {
 }
 
 func (p *Parser) ParseExpr() Expr {
+	return p.ParseTerm()
+}
+
+func (p *Parser) ParseTerm() Expr {
+	left := p.ParseFactor()
+
+	for p.current().Kind == PUNC_PLUS || p.current().Kind == PUNC_SUB {
+		_, opTok := p.eat(p.current().Kind)
+		right := p.ParseFactor()
+
+		binopTerm := BinopTerm{
+			Left:     left,
+			Right:    right,
+			Operator: opTok.Value,
+		}
+
+		left = Expr{
+			Type:      AST_BINOP_TERM,
+			BinopTerm: &binopTerm,
+		}
+	}
+
+	return left
+}
+
+func (p *Parser) ParseFactor() Expr {
+	left := p.ParsePrimary()
+
+	for p.current().Kind == PUNC_MULT || p.current().Kind == PUNC_DIV {
+		_, opTok := p.eat(p.current().Kind)
+		right := p.ParsePrimary()
+
+		binopFactor := BinopFactor{
+			Left:     left,
+			Right:    right,
+			Operator: opTok.Value,
+		}
+
+		left = Expr{
+			Type:        AST_BINOP_FACTOR,
+			BinopFactor: &binopFactor,
+		}
+	}
+
+	return left
+}
+
+func (p *Parser) ParsePrimary() Expr {
 	expr := Expr{}
+
 	if p.current().Kind == NUMBER_FLOAT {
 		number := p.ParseNumber()
 		expr.Number = &number
@@ -196,10 +269,20 @@ func (p *Parser) ParseExpr() Expr {
 			// TODO: check a symbol table if a variable created
 		}
 	} else if p.current().Kind == PUNC_LPAREN {
-		if p.lookAhead(1).Kind == NUMBER_FLOAT {
+		if p.isTuple() {
 			tuple := p.ParseTuple()
 			expr.Type = RuleType(int(AST_TUPLE) + len(tuple.Values))
 			expr.Tuple = &tuple
+		} else {
+			// Handle parenthesized expressions
+			p.eat(PUNC_LPAREN)
+			expr = p.ParseExpr()
+			p.eat(PUNC_RPAREN)
+
+			// make this part extendable for the future
+			if expr.Type != AST_ARR_EXPR {
+				expr.HasParentheses = true
+			}
 		}
 	} else if p.current().Kind == PUNC_LSQUARE {
 		arrExpr := p.ParseArrExpr()

@@ -17,6 +17,8 @@ const (
 	AST_TUPLE2
 	AST_TUPLE3
 	AST_NUMBER
+	AST_BINOP_TERM
+	AST_BINOP_FACTOR
 	AST_ARR_EXPR
 )
 
@@ -32,11 +34,14 @@ type Stmt struct {
 }
 
 type Expr struct {
-	Type    RuleType
-	FunCall *FunCall
-	Tuple   *Tuple
-	ArrExpr *ArrExpr
-	Number  *Number
+	Type           RuleType
+	FunCall        *FunCall
+	Tuple          *Tuple
+	ArrExpr        *ArrExpr
+	Number         *Number
+	BinopTerm      *BinopTerm
+	BinopFactor    *BinopFactor
+	HasParentheses bool
 }
 
 type Number struct {
@@ -45,6 +50,18 @@ type Number struct {
 
 type Tuple struct {
 	Values []string
+}
+
+type BinopTerm struct {
+	Left     Expr
+	Right    Expr
+	Operator string
+}
+
+type BinopFactor struct {
+	Left     Expr
+	Right    Expr
+	Operator string
 }
 
 type SymbolType int
@@ -180,6 +197,10 @@ func printExpr(expr Expr, level int) {
 		printArr(expr.ArrExpr, level)
 	case AST_NUMBER:
 		printNumber(expr.Number, level)
+	case AST_BINOP_TERM:
+		printBinopTerm(expr.BinopTerm, level)
+	case AST_BINOP_FACTOR:
+		printBinopFactor(expr.BinopFactor, level)
 	default:
 		fmt.Printf("%sUnknown expr type: %v\n", indent(level), expr.Type)
 	}
@@ -213,4 +234,20 @@ func printArr(arr *ArrExpr, level int) {
 		fmt.Printf("%s[%d]\n", indent(level+1), i)
 		printExpr(e, level+2)
 	}
+}
+
+func printBinopTerm(binop *BinopTerm, level int) {
+	fmt.Printf("%sBinaryOperation (Term): %s\n", indent(level), binop.Operator)
+	fmt.Printf("%sLeft:\n", indent(level+1))
+	printExpr(binop.Left, level+2)
+	fmt.Printf("%sRight:\n", indent(level+1))
+	printExpr(binop.Right, level+2)
+}
+
+func printBinopFactor(binop *BinopFactor, level int) {
+	fmt.Printf("%sBinaryOperation (Factor): %s\n", indent(level), binop.Operator)
+	fmt.Printf("%sLeft:\n", indent(level+1))
+	printExpr(binop.Left, level+2)
+	fmt.Printf("%sRight:\n", indent(level+1))
+	printExpr(binop.Right, level+2)
 }

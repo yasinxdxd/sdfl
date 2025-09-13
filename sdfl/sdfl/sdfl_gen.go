@@ -1,6 +1,9 @@
 package sdfl
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 var functionSymbols = map[string]FunDef{
 	"scene":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SCENE, Id: "scene", FunDefArgNames: []string{"background", "camera", "children"}},
@@ -186,6 +189,10 @@ func (funDef *FunDef) generate(args ...any) {
 }
 
 func (expr *Expr) generate(args ...any) {
+	if expr.HasParentheses {
+		generateCodeBoth("(")
+	}
+
 	switch expr.Type {
 	case AST_FUN_CALL:
 		expr.FunCall.generate()
@@ -199,8 +206,16 @@ func (expr *Expr) generate(args ...any) {
 		expr.ArrExpr.generate()
 	case AST_NUMBER:
 		expr.Number.generate()
+	case AST_BINOP_TERM:
+		expr.BinopTerm.generate()
+	case AST_BINOP_FACTOR:
+		expr.BinopFactor.generate()
 	default:
 		fmt.Printf("gen error: unknown expr type: %v\n", expr.Type)
+	}
+
+	if expr.HasParentheses {
+		generateCodeBoth(")")
 	}
 }
 
@@ -236,8 +251,9 @@ func (funCall *FunCall) generate(args ...any) string {
 		for j := 0; j < len(funDef.FunDefArgNames); j++ {
 			funNamedArg, ok := funCall.FunNamedArgs[funDef.FunDefArgNames[j]]
 			if !ok {
-				// TODO: Better error messages
-				fmt.Println("ERROR!")
+				fmt.Printf("ERROR: function call %s, did you mean %s?", funDef.Id, funDef.FunDefArgNames[j])
+				// TODO: find a better way than exit
+				os.Exit(-1)
 			}
 			if funDef.FunDefArgNames[j] == funNamedArg.ArgName {
 				exprs = append(exprs, &funNamedArg.Expr)
@@ -375,6 +391,18 @@ func (tuple *Tuple) generate(args ...any) {
 
 func (number *Number) generate(args ...any) {
 	generateCodeBoth(number.Value)
+}
+
+func (binopFactor *BinopFactor) generate(args ...any) {
+	binopFactor.Left.generate(args)
+	generateCodeBoth(binopFactor.Operator)
+	binopFactor.Right.generate(args)
+}
+
+func (binopTerm *BinopTerm) generate(args ...any) {
+	binopTerm.Left.generate(args)
+	generateCodeBoth(binopTerm.Operator)
+	binopTerm.Right.generate(args)
 }
 
 func (arrExpr *ArrExpr) generate(args ...any) {
