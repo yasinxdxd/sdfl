@@ -445,9 +445,8 @@ func parseBinaryFactor(binopSeq StackSeqObject, pos *int) Expr {
 	}
 }
 
-func ParseSeq() {
-	// TODO no need for file I think
-	readFile, err := os.Open("ast_sequence.txt")
+func ParseSeq(filepath string) {
+	readFile, err := os.Open(filepath)
 
 	if err != nil {
 		fmt.Println(err)
