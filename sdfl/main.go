@@ -29,6 +29,14 @@ func compile(filePath string) {
 	program := parser.Parse()
 
 	sdfl.PrintAST(program)
+	// convert to sequence
+	sequence := sdfl.ASTToSequence(program)
+	// fmt.Println(sequence)
+	err = sdfl.WriteSequenceToFile(program, "ast_sequence.txt", sequence)
+	if err != nil {
+		fmt.Printf("Error writing to file: %v\n", err)
+	}
+
 	sdfl.Reset()
 	sdfl.Generate(&program)
 
