@@ -19,6 +19,29 @@ const (
 	AST_ARR_EXPR
 )
 
+func ruleTypeToString(r RuleType) string {
+	switch r {
+	case AST_PROGRAM:
+		return "AST_PROGRAM"
+	case AST_FUN_DEF:
+		return "AST_FUN_DEF"
+	case AST_FUN_CALL:
+		return "AST_FUN_CALL"
+	case AST_TUPLE:
+		return "AST_TUPLE"
+	case AST_NUMBER:
+		return "AST_NUMBER"
+	case AST_BINOP_TERM:
+		return "AST_BINOP_TERM"
+	case AST_BINOP_FACTOR:
+		return "AST_BINOP_FACTOR"
+	case AST_ARR_EXPR:
+		return "AST_ARR_EXPR"
+	default:
+		return fmt.Sprintf("Unknown: RuleType(%d)", int(r))
+	}
+}
+
 type Program struct {
 	Type  RuleType
 	Stmts []Stmt

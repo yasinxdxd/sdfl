@@ -43,7 +43,6 @@ func funDefToLines(funDef *FunDef) []string {
 		lines = append(lines, exprToLines(*funDef.Expr)...)
 	}
 
-	lines = append(lines, "fundef:end")
 	return lines
 }
 
@@ -126,7 +125,8 @@ func tupleToLines(tuple *Tuple) []string {
 func arrExprToLines(arrExpr *ArrExpr) []string {
 	var lines []string
 
-	lines = append(lines, "val:arr:begin")
+	arity := strconv.FormatInt(int64(len(arrExpr.Exprs)), 10)
+	lines = append(lines, "val:arr:begin:"+arity)
 
 	for _, expr := range arrExpr.Exprs {
 		lines = append(lines, exprToLines(expr)...)
