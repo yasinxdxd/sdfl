@@ -196,11 +196,7 @@ func (expr *Expr) generate(args ...any) {
 	switch expr.Type {
 	case AST_FUN_CALL:
 		expr.FunCall.generate()
-	case AST_TUPLE1:
-		fallthrough
-	case AST_TUPLE2:
-		fallthrough
-	case AST_TUPLE3:
+	case AST_TUPLE:
 		expr.Tuple.generate()
 	case AST_ARR_EXPR:
 		expr.ArrExpr.generate()

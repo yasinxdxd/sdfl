@@ -271,7 +271,7 @@ func (p *Parser) ParsePrimary() Expr {
 	} else if p.current().Kind == PUNC_LPAREN {
 		if p.isTuple() {
 			tuple := p.ParseTuple()
-			expr.Type = RuleType(int(AST_TUPLE) + len(tuple.Values))
+			expr.Type = AST_TUPLE // RuleType(int(AST_TUPLE) + len(tuple.Values))
 			expr.Tuple = &tuple
 		} else {
 			// Handle parenthesized expressions

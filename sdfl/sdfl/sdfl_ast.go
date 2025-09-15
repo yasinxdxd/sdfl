@@ -13,9 +13,6 @@ const (
 	AST_FUN_DEF
 	AST_FUN_CALL
 	AST_TUPLE
-	AST_TUPLE1
-	AST_TUPLE2
-	AST_TUPLE3
 	AST_NUMBER
 	AST_BINOP_TERM
 	AST_BINOP_FACTOR
@@ -187,11 +184,7 @@ func printExpr(expr Expr, level int) {
 	switch expr.Type {
 	case AST_FUN_CALL:
 		printFunCall(expr.FunCall, level)
-	case AST_TUPLE1:
-		fallthrough
-	case AST_TUPLE2:
-		fallthrough
-	case AST_TUPLE3:
+	case AST_TUPLE:
 		printTuple(expr.Tuple, level)
 	case AST_ARR_EXPR:
 		printArr(expr.ArrExpr, level)
