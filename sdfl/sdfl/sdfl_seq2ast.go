@@ -250,6 +250,7 @@ func parseFunctionDefinition(fundefSeq StackSeqObject, pos *int) Stmt {
 		FunDefArgNames: argNames,
 		Expr:           &bodyExpr,
 	}
+	functionSymbols[*fundefSeq.Id] = *funDef
 
 	return Stmt{
 		Type:   AST_FUN_DEF,
