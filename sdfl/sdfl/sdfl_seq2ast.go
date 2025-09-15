@@ -86,20 +86,6 @@ type Stack struct {
 
 var _stack Stack
 
-func (s *Stack) Top() StackSeqObject {
-	if s.IsEmpty() {
-		panic("stack is empty")
-	}
-	return s.Objects[len(s.Objects)-1]
-}
-
-func (s *Stack) IsEmpty() bool {
-	if len(s.Objects) == 0 {
-		return true
-	}
-	return false
-}
-
 func (s *Stack) Print() {
 	for _, item := range s.Objects {
 		fmt.Print(item, "\n")
@@ -109,13 +95,6 @@ func (s *Stack) Print() {
 
 func (s *Stack) Push(obj StackSeqObject) {
 	s.Objects = append(s.Objects, obj)
-}
-
-func (s *Stack) Pop() {
-	if s.IsEmpty() {
-		return
-	}
-	s.Objects = s.Objects[:len(s.Objects)-1]
 }
 
 func parseObject(objStrArr []string) StackSeqObject {
@@ -197,30 +176,273 @@ func parseObject(objStrArr []string) StackSeqObject {
 }
 
 func Seq2AST() Program {
-	// TODO: implement this
-	for !_stack.IsEmpty() {
-		seq := _stack.Top()
+	// process the stack from beginning to end (index 0 to len-1)
 
-		switch seq.SeqType {
-		case SEQ_TYPE_CALL:
+	pos := 0
+	var stmts []Stmt
+	var mainExpr Expr
 
-		case SEQ_TYPE_FUNDEF:
+	// Parse all top-level items (function definitions and main expression)
+	for pos < len(_stack.Objects) {
+		seq := _stack.Objects[pos]
 
-		case SEQ_TYPE_ARG:
-
-		case SEQ_TYPE_VAL:
-
-		case SEQ_TYPE_LIT:
-
-		case SEQ_TYPE_LEFT:
-
-		case SEQ_TYPE_RIGHT:
-
-		default:
-			panic("Seq2AST:ERROR: Unknown sequence!")
+		if seq.SeqType == SEQ_TYPE_FUNDEF {
+			// Parse function definition
+			pos++
+			stmt := parseFunctionDefinition(seq, &pos)
+			stmts = append(stmts, stmt)
+		} else {
+			// Parse main expression (should be the scene call)
+			mainExpr = parseExpression(&pos)
+			break // Main expression should be the last thing
 		}
 	}
-	return Program{}
+
+	return Program{
+		Type:  AST_PROGRAM,
+		Stmts: stmts,
+		Expr:  mainExpr,
+	}
+}
+
+func parseExpression(pos *int) Expr {
+	if *pos >= len(_stack.Objects) {
+		panic("Unexpected end of sequence")
+	}
+
+	seq := _stack.Objects[*pos]
+	*pos++
+
+	switch seq.SeqType {
+	case SEQ_TYPE_CALL:
+		return parseFunctionCall(seq, pos)
+	case SEQ_TYPE_VAL:
+		return parseValue(seq, pos)
+	default:
+		panic(fmt.Sprintf("Expected call or val, got: %v", seq.SeqType))
+	}
+}
+
+func parseFunctionDefinition(fundefSeq StackSeqObject, pos *int) Stmt {
+	// Parse function arguments (if any)
+	argNames := make([]string, fundefSeq.Arity)
+	for i := 0; i < fundefSeq.Arity; i++ {
+		if *pos >= len(_stack.Objects) {
+			panic("Expected function argument")
+		}
+
+		argSeq := _stack.Objects[*pos]
+		if argSeq.SeqType != SEQ_TYPE_ARG {
+			panic(fmt.Sprintf("Expected ARG for function parameter, got: %v", argSeq.SeqType))
+		}
+
+		argNames[i] = *argSeq.Id
+		*pos++
+	}
+
+	// Parse function body expression
+	bodyExpr := parseExpression(pos)
+
+	funDef := &FunDef{
+		Type:           AST_FUN_DEF,
+		Id:             *fundefSeq.Id,
+		SymbolType:     FUN_USER_DEFINED,
+		FunDefArgNames: argNames,
+		Expr:           &bodyExpr,
+	}
+
+	return Stmt{
+		Type:   AST_FUN_DEF,
+		FunDef: funDef,
+	}
+}
+
+func parseFunctionCall(callSeq StackSeqObject, pos *int) Expr {
+	funCall := &FunCall{
+		Id:           *callSeq.Id,
+		FunNamedArgs: make(map[string]FunNamedArg),
+	}
+
+	// Parse the specified number of arguments
+	for i := 0; i < callSeq.Arity; i++ {
+		// Next should be an ARG
+		if *pos >= len(_stack.Objects) {
+			panic("Expected argument in function call")
+		}
+
+		argSeq := _stack.Objects[*pos]
+		if argSeq.SeqType != SEQ_TYPE_ARG {
+			panic(fmt.Sprintf("Expected ARG, got: %v at position %d", argSeq.SeqType, *pos))
+		}
+
+		argName := *argSeq.Id
+		*pos++
+
+		// Parse the argument value expression
+		argExpr := parseExpression(pos)
+
+		funCall.FunNamedArgs[argName] = FunNamedArg{
+			ArgName: argName,
+			Expr:    argExpr,
+		}
+	}
+
+	return Expr{
+		Type:    AST_FUN_CALL,
+		FunCall: funCall,
+	}
+}
+
+func parseValue(valSeq StackSeqObject, pos *int) Expr {
+	if valSeq.RuleType == nil {
+		panic("Value sequence missing rule type")
+	}
+
+	switch *valSeq.RuleType {
+	case AST_NUMBER:
+		return parseNumberValue(pos)
+
+	case AST_TUPLE:
+		return parseTupleValue(pos)
+
+	case AST_ARR_EXPR:
+		return parseArrayValue(valSeq, pos)
+
+	case AST_BINOP_TERM:
+		return parseBinaryTerm(valSeq, pos)
+
+	case AST_BINOP_FACTOR:
+		return parseBinaryFactor(valSeq, pos)
+
+	default:
+		panic(fmt.Sprintf("Unknown value rule type: %v", *valSeq.RuleType))
+	}
+}
+
+func parseNumberValue(pos *int) Expr {
+	// Next should be a literal
+	if *pos >= len(_stack.Objects) {
+		panic("Expected literal for number")
+	}
+
+	litSeq := _stack.Objects[*pos]
+	if litSeq.SeqType != SEQ_TYPE_LIT {
+		panic(fmt.Sprintf("Expected literal for number, got: %v", litSeq.SeqType))
+	}
+	*pos++
+
+	return Expr{
+		Type:   AST_NUMBER,
+		Number: &Number{Value: *litSeq.LitValue},
+	}
+}
+
+func parseTupleValue(pos *int) Expr {
+	// Next should be a literal
+	if *pos >= len(_stack.Objects) {
+		panic("Expected literal for tuple")
+	}
+
+	litSeq := _stack.Objects[*pos]
+	if litSeq.SeqType != SEQ_TYPE_LIT {
+		panic(fmt.Sprintf("Expected literal for tuple, got: %v", litSeq.SeqType))
+	}
+	*pos++
+
+	// Parse tuple string like "(0, 0, 0)"
+	tupleStr := strings.Trim(*litSeq.LitValue, "()")
+	values := strings.Split(tupleStr, ",")
+	for i := range values {
+		values[i] = strings.TrimSpace(values[i])
+	}
+
+	return Expr{
+		Type:  AST_TUPLE,
+		Tuple: &Tuple{Values: values},
+	}
+}
+
+func parseArrayValue(arrSeq StackSeqObject, pos *int) Expr {
+	exprs := make([]Expr, 0)
+
+	// Parse the specified number of array elements
+	for i := 0; i < arrSeq.Arity; i++ {
+		expr := parseExpression(pos)
+		exprs = append(exprs, expr)
+	}
+
+	// Skip "val:arr:end" if it exists
+	if *pos < len(_stack.Objects) {
+		nextSeq := _stack.Objects[*pos]
+		if nextSeq.SeqType == SEQ_TYPE_VAL && nextSeq.RuleType != nil &&
+			*nextSeq.RuleType == AST_ARR_EXPR {
+			// This might be the "end" marker, skip it
+			*pos++
+		}
+	}
+
+	return Expr{
+		Type:    AST_ARR_EXPR,
+		ArrExpr: &ArrExpr{Exprs: exprs},
+	}
+}
+
+func parseBinaryTerm(binopSeq StackSeqObject, pos *int) Expr {
+	var leftExpr, rightExpr Expr
+
+	// Look for LEFT marker and parse left expression
+	if *pos < len(_stack.Objects) && _stack.Objects[*pos].SeqType == SEQ_TYPE_LEFT {
+		*pos++ // Skip LEFT marker
+		leftExpr = parseExpression(pos)
+	} else {
+		panic("Expected LEFT marker for binary term")
+	}
+
+	// Look for RIGHT marker and parse right expression
+	if *pos < len(_stack.Objects) && _stack.Objects[*pos].SeqType == SEQ_TYPE_RIGHT {
+		*pos++ // Skip RIGHT marker
+		rightExpr = parseExpression(pos)
+	} else {
+		panic("Expected RIGHT marker for binary term")
+	}
+
+	return Expr{
+		Type: AST_BINOP_TERM,
+		BinopTerm: &BinopTerm{
+			Left:     leftExpr,
+			Right:    rightExpr,
+			Operator: *binopSeq.BinopOp,
+		},
+	}
+}
+
+func parseBinaryFactor(binopSeq StackSeqObject, pos *int) Expr {
+	var leftExpr, rightExpr Expr
+
+	// Look for LEFT marker and parse left expression
+	if *pos < len(_stack.Objects) && _stack.Objects[*pos].SeqType == SEQ_TYPE_LEFT {
+		*pos++ // Skip LEFT marker
+		leftExpr = parseExpression(pos)
+	} else {
+		panic("Expected LEFT marker for binary factor")
+	}
+
+	// Look for RIGHT marker and parse right expression
+	if *pos < len(_stack.Objects) && _stack.Objects[*pos].SeqType == SEQ_TYPE_RIGHT {
+		*pos++ // Skip RIGHT marker
+		rightExpr = parseExpression(pos)
+	} else {
+		panic("Expected RIGHT marker for binary factor")
+	}
+
+	return Expr{
+		Type: AST_BINOP_FACTOR,
+		BinopFactor: &BinopFactor{
+			Left:     leftExpr,
+			Right:    rightExpr,
+			Operator: *binopSeq.BinopOp,
+		},
+	}
 }
 
 func ParseSeq() {

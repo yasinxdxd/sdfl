@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func ASTToSequence(prog Program) string {
+func AST2Seq(prog Program) string {
 	var lines []string
 
 	for _, stmt := range prog.Stmts {
@@ -196,7 +196,7 @@ func WriteMultipleSequencesToFile(programs []Program, filename string) error {
 	defer file.Close()
 
 	for i, prog := range programs {
-		sequence := ASTToSequence(prog)
+		sequence := AST2Seq(prog)
 		_, err = file.WriteString(sequence)
 		if err != nil {
 			return fmt.Errorf("failed to write sequence %d to file %s: %w", i, filename, err)
@@ -228,7 +228,7 @@ func AppendSequenceToFile(prog Program, filename string) error {
 		return fmt.Errorf("failed to get file info for %s: %w", filename, err)
 	}
 
-	sequence := ASTToSequence(prog)
+	sequence := AST2Seq(prog)
 
 	if fileInfo.Size() > 0 {
 		_, err = file.WriteString("\n\n" + sequence)
