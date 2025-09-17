@@ -1,4 +1,6 @@
 #include <window.hpp>
+#include <texture2d.hpp>
+#include <render_texture2d.hpp>
 #include <input.hpp>
 #include <shader.hpp>
 #include <ssbo.hpp>
@@ -11,6 +13,11 @@
 #include <iostream>
 #include <fstream>
 #include <file_watcher.hpp>
+#include <sdf_app.hpp>
+
+Texture2D* screenTexture;
+RenderTexture2D screenRenderTexture;
+ImVec2 screenSize;
 
 void exportSDFToBinary(const std::vector<float>& sdfData, int resolution, 
                       const std::string& filename) {
@@ -29,6 +36,11 @@ void exportSDFToBinary(const std::vector<float>& sdfData, int resolution,
 
 int main(void) {
     yt2d::Window window("hello", 480, 340);
+    InitImgui(window);
+
+    screenTexture = new Texture2D(640, 480, nullptr);
+    screenTexture->generate_texture();
+    screenRenderTexture.set_texture(screenTexture);
 
     /* shader */
     glcompiler::init();
@@ -86,12 +98,42 @@ int main(void) {
 
 
         window.clear();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::Begin("window");
+        ImGui::BeginChild("RenderSection");
+        {
+            ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*screenRenderTexture.get_texture()));            
+            ImVec2 size = ImVec2(ImGui::GetWindowSize());
+            ImGui::Image(textureID, size, ImVec2(0, 1), ImVec2(1, 0)); // Flip UVs for correct orientation
+
+            // get correct mouse coords:
+            ImVec2 mouseScreen = ImGui::GetMousePos();
+            ImVec2 imagePos = ImGui::GetItemRectMin(); // Position of top-left corner of ImGui::Image
+            screenSize = ImGui::GetItemRectSize(); // Size of the image
+            // mouseInImageDisplay = ImVec2(mouseScreen.x - imagePos.x, mouseScreen.y - imagePos.y);
+        }
+        ImGui::EndChild();
+        ImGui::End();
+
+
+        screenRenderTexture.bind();
+        window.clear();
+        window.setViewport(0, 0, screenRenderTexture.get_texture()->getWidth(), screenRenderTexture.get_texture()->getHeight());
+
         // render
         render(quad, 6, shader, [&](Shader* shader) {
             // send uniforms
-            shader->set<int, 2>("window_size", window.getWindowWidth(), window.getWindowHeight());
+            shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
             shader->set<float, 1>("elapsed_time", elapsed_time);
         });
+
+        screenRenderTexture.unbind();
+
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         window.display();
         
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -102,5 +144,7 @@ int main(void) {
 
     delete shader;
     delete computeShader;
+    delete screenTexture;
     glcompiler::destroy();
+    DestroyImgui();
 }

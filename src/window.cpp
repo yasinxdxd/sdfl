@@ -467,3 +467,9 @@ bool yt2d::Window::isWindowHovered()
         
     return false;
 }
+
+void yt2d::Window::setViewport(int x, int y, int w, int h)
+{
+    glViewport(x, y, w, h);
+    glEnable(GL_DEPTH_TEST);
+}

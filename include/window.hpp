@@ -58,6 +58,8 @@ namespace yt2d
         u32 getWindowWidth();
         u32 getWindowHeight();
 
+        void setViewport(int x, int y, int w, int h);
+
         void setWindowPos(int x, int y);
         void setWindowPos(ymath::Vector<2, int> pos);
 
