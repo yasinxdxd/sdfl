@@ -238,7 +238,8 @@ func (funCall *FunCall) generate(args ...any) string {
 	println(funCall.Id, funDef.SymbolType, rayPosition)
 
 	if !ok {
-		return ""
+		fmt.Printf("ERROR: function call %s is not defined!\n", funCall.Id)
+		os.Exit(-1)
 	}
 
 	orderedArgs := func() []*Expr {
