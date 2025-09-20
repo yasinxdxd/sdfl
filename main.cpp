@@ -56,7 +56,7 @@ void exportSDFData(const char* filepath) {
     size_t bufferSize = resolution * resolution * resolution * sizeof(float);
     sdfBuffer.initialize(bufferSize);
     
-    Shader* computeShader = new Shader("sdfl/out_compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
+    Shader* computeShader = new Shader("out_compute.glsl", Shader::ShaderCodeType::COMPUTE_SHADER);
     glcompiler::compile_and_attach_shaders(computeShader);
     Shader::dispatch_compute(computeShader, workGroupsPerAxis, workGroupsPerAxis, workGroupsPerAxis, [&](Shader* shader) {
         computeShader->set<float, 3>("minBound", -8.0f, -8.0f, -8.0f);
@@ -107,6 +107,17 @@ std::vector<unsigned char> encode_texture_to_jpeg(Texture2D* tex, int quality = 
     return jpeg_buffer; // this can be sent over HTTP
 }
 
+std::string read_file_to_string(const std::string& filepath) {
+    std::ifstream file(filepath, std::ios::in | std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Failed to open file: " + filepath);
+    }
+
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
 enum class PageState {
     RENDER_STATE,
     FILE_STATE,
@@ -138,12 +149,25 @@ void createInfoWindow() {
         ImGui::InputText("##name_input", name_buff, NAME_BUFF_SIZE);
         ImGui::Text("Description");
         ImGui::InputTextMultiline("##description_input", description_buff, DESCRIPTION_BUFF_SIZE, 
-                                 ImVec2(availableSize.x - 20, 200)); // Use available space
+                                 ImVec2(availableSize.x * 0.9f, 128), ImGuiInputTextFlags_WordWrap);
         widget::DrawTagInput();
         if (ImGui::Button("Publish", {64, 28})) {
             Texture2D* tex = screenRenderTexture.get_texture();
             std::vector<unsigned char> jpeg_data = encode_texture_to_jpeg(tex, 90);
-            create_program(name_buff, description_buff, jpeg_data);
+
+            std::string code;
+            std::string sequence;
+            try {
+                code = read_file_to_string(sdfl_file_name);
+                sequence = read_file_to_string("ast_sequence.txt");
+
+                std::cout << "Code length: " << code.size() << "\n";
+                std::cout << "Sequence length: " << sequence.size() << "\n";
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << std::endl;
+            }
+
+            publish_program(name_buff, description_buff, code, sequence, jpeg_data);
         }
     }
     ImGui::End();
@@ -184,6 +208,7 @@ void createFileWindow(const yt2d::Window& window) {
         const std::vector<std::string> files = window.getDraggedPaths();
         if (files.size() == 1) {
             sdfl_file_name = files[0];
+            launch_process_blocking({"./sdfl/sdflc", sdfl_file_name});
             std::thread([=]() {
                 launch_process_blocking({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"});
             }).detach();

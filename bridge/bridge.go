@@ -6,16 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 )
 
-// Data sent by other Go app
-type GoAppData struct {
-	Code                   string   `json:"code"`
-	SequenceRepresentation []string `json:"sequence_representation"`
-}
-
-// Combined request to Flask
+// Request to Flask
 type ProgramRequest struct {
 	Code                   string   `json:"code"`
 	Description            string   `json:"description"`
@@ -24,35 +17,16 @@ type ProgramRequest struct {
 	PreviewImage           []byte   `json:"preview_image,omitempty"`
 }
 
-var (
-	// buffer: store latest Go app data keyed by some program key
-	buffer = struct {
-		sync.Mutex
-		data GoAppData
-	}{}
-)
-
-func goAppHandler(w http.ResponseWriter, r *http.Request) {
-	var d GoAppData
-	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
-		http.Error(w, "invalid JSON", 400)
-		return
-	}
-
-	buffer.Lock()
-	buffer.data = d
-	buffer.Unlock()
-	w.WriteHeader(200)
-}
-
 func cppHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "invalid form", 400)
+		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 
 	name := r.FormValue("name")
 	description := r.FormValue("description")
+	code := r.FormValue("code")
+	sequence := r.Form["sequence_representation"] // çoklu gönderim için
 
 	// optional preview_image
 	var previewImage []byte
@@ -61,23 +35,16 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 		previewImage, _ = io.ReadAll(file)
 	}
 
-	// get latest Go app data
-	buffer.Lock()
-	goData := buffer.data
-	buffer.Unlock()
-
-	// Check if both parts exist
-	if goData.Code == "" || len(goData.SequenceRepresentation) == 0 || name == "" || description == "" {
-		// Not ready yet, just acknowledge receipt
-		w.WriteHeader(200)
-		fmt.Fprintln(w, "Data stored, waiting for both parts to be ready")
+	// Check if required fields exist
+	if code == "" || len(sequence) == 0 || name == "" || description == "" {
+		http.Error(w, "missing required fields", http.StatusBadRequest)
 		return
 	}
 
-	// build JSON for Flask
+	// Build JSON for Flask
 	reqBody := ProgramRequest{
-		Code:                   goData.Code,
-		SequenceRepresentation: goData.SequenceRepresentation,
+		Code:                   code,
+		SequenceRepresentation: sequence,
 		Description:            description,
 		Name:                   name,
 		PreviewImage:           previewImage,
@@ -85,18 +52,15 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, _ := json.Marshal(reqBody)
 
-	// pretty print to terminal
-	var prettyJSON bytes.Buffer
-	if err := json.Indent(&prettyJSON, jsonBytes, "", "  "); err == nil {
-		fmt.Println("=== Data to be sent to Flask ===")
-		fmt.Println(prettyJSON.String())
-		fmt.Println("=== End of Data ===")
-	}
+	// Debug log
+	fmt.Println("=== Data to be sent to Flask ===")
+	fmt.Println(string(jsonBytes))
+	fmt.Println("=== End of Data ===")
 
-	// forward to Flask
+	// Forward to Flask
 	resp, err := http.Post("http://localhost:5000/program", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
-		http.Error(w, "Flask unreachable", 502)
+		http.Error(w, "Flask unreachable", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -106,7 +70,7 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/goapp", goAppHandler) // other Go app posts here
-	http.HandleFunc("/program", cppHandler) // C++ posts here to trigger send
+	http.HandleFunc("/program", cppHandler) // C++ posts here
+	fmt.Println("Bridge server listening on :9999")
 	http.ListenAndServe(":9999", nil)
 }
