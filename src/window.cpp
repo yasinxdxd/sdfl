@@ -16,6 +16,7 @@
 #include <imgui_impl_sdl.h>
 #endif
 #include <iostream>
+#include <vector>
 
 
 yt2d::Window::Window(const std::string& title, u32 width, u32 height, int flags):
@@ -243,6 +244,7 @@ YT2D_NODISCARD YT2D_STATUS yt2d::Window::Init(int flags)
     glfwSetKeyCallback(m_window, _priv::callbacks::glfw_key_callback);
     glfwSetCursorPosCallback(m_window, _priv::callbacks::glfw_cursor_position_callback);
     glfwSetMouseButtonCallback(m_window, _priv::callbacks::glfw_mouse_button_callback);
+    glfwSetDropCallback(m_window, _priv::callbacks::glfw_window_drop_callback);
 
     if (get_bit(&flags, 2) == 1)
     {
@@ -424,6 +426,14 @@ void _priv::callbacks::glfw_window_always_focus_callback(GLFWwindow * window, in
     }
 }
 
+std::vector<std::string> g_drag_paths;
+static void _priv::callbacks::glfw_window_drop_callback(GLFWwindow* window, int count, const char** paths) {
+    g_drag_paths.clear();
+    for (size_t i = 0; i < count; i++) {
+        g_drag_paths.push_back(std::string(paths[i]));
+    }
+}
+
 u32 yt2d::Window::getWindowWidth()
 {
     int width, height;
@@ -472,4 +482,9 @@ void yt2d::Window::setViewport(int x, int y, int w, int h)
 {
     glViewport(x, y, w, h);
     glEnable(GL_DEPTH_TEST);
+}
+
+std::vector<std::string> yt2d::Window::getDraggedPaths() const
+{    
+    return g_drag_paths;
 }

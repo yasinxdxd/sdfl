@@ -28,12 +28,14 @@ ImVec2 screenSize;
 char description_buff[DESCRIPTION_BUFF_SIZE] = {0};
 char name_buff[NAME_BUFF_SIZE] = {0};
 
+std::string sdfl_file_name;
+
 
 int resolution = 256;
 int workGroupsPerAxis = (resolution + 7) / 8; // ceil
 
 
-void exportSDFToBinary(const std::vector<float>& sdfData, int resolution, 
+void writeSDFToBinary(const std::vector<float>& sdfData, int resolution, 
                       const std::string& filename) {
     std::ofstream file(filename, std::ios::binary);
     
@@ -48,7 +50,7 @@ void exportSDFToBinary(const std::vector<float>& sdfData, int resolution,
     std::cout << "Exported SDF data to " << filename << std::endl;
 }
 
-void ExportSDFData(const char* filepath) {
+void exportSDFData(const char* filepath) {
     // create SSBO for SDF output
     SSBO sdfBuffer(0); // binding point 0 // inside glsl: layout(std430, binding = 0)
     size_t bufferSize = resolution * resolution * resolution * sizeof(float);
@@ -69,7 +71,7 @@ void ExportSDFData(const char* filepath) {
     
     // std::cout << "Downloaded " << sdfData.size() << " SDF values" << std::endl;
     
-    exportSDFToBinary(sdfData, resolution, filepath);
+    writeSDFToBinary(sdfData, resolution, filepath);
     delete computeShader;
 }
 
@@ -105,6 +107,132 @@ std::vector<unsigned char> encode_texture_to_jpeg(Texture2D* tex, int quality = 
     return jpeg_buffer; // this can be sent over HTTP
 }
 
+enum class PageState {
+    RENDER_STATE,
+    FILE_STATE,
+};
+PageState page_state = PageState::FILE_STATE;
+
+
+void createRendererWindow() {
+    ImGui::Begin("Renderer");
+    {
+        ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*screenRenderTexture.get_texture()));
+        ImVec2 size = ImGui::GetContentRegionAvail(); // Use available space instead of window size
+        ImGui::Image(textureID, size, ImVec2(0, 1), ImVec2(1, 0)); // Flip UVs for correct orientation
+
+        // get correct mouse coords:
+        ImVec2 mouseScreen = ImGui::GetMousePos();
+        ImVec2 imagePos = ImGui::GetItemRectMin(); // Position of top-left corner of ImGui::Image
+        screenSize = ImGui::GetItemRectSize(); // Size of the image
+        // mouseInImageDisplay = ImVec2(mouseScreen.x - imagePos.x, mouseScreen.y - imagePos.y);
+    }
+    ImGui::End();
+}
+
+void createInfoWindow() {
+    ImGui::Begin("Info");
+    {
+        ImVec2 availableSize = ImGui::GetContentRegionAvail();
+        ImGui::Text("Name");
+        ImGui::InputText("##name_input", name_buff, NAME_BUFF_SIZE);
+        ImGui::Text("Description");
+        ImGui::InputTextMultiline("##description_input", description_buff, DESCRIPTION_BUFF_SIZE, 
+                                 ImVec2(availableSize.x - 20, 200)); // Use available space
+        widget::DrawTagInput();
+        if (ImGui::Button("Publish", {64, 28})) {
+            Texture2D* tex = screenRenderTexture.get_texture();
+            std::vector<unsigned char> jpeg_data = encode_texture_to_jpeg(tex, 90);
+            create_program(name_buff, description_buff, jpeg_data);
+        }
+    }
+    ImGui::End();
+}
+
+void createExportWindow() {
+    ImGui::Begin("Export");
+    {
+        if (ImGui::Button("Export SDF", {120, 28})) {
+            // for now hardcoded path
+            exportSDFData("testpy/test_sdf_data.bin");
+        }
+    }
+    ImGui::End();
+}
+
+void createFileWindow(const yt2d::Window& window) {
+    ImGui::Begin("Open File");
+    {
+        // ImGui::Text("Drag and Drop an .sdfl file");
+        {
+            const char* text = "Drag and Drop an .sdfl file";
+            ImGui::SetWindowFontScale(2.0f); // 2x bigger
+            // recalculate text size
+            ImVec2 windowSize = ImGui::GetWindowSize();
+            ImVec2 textSize = ImGui::CalcTextSize(text);
+            
+            // center
+            ImGui::SetCursorPosX((windowSize.x - textSize.x) * 0.5f);
+            ImVec2 availableSize = ImGui::GetContentRegionAvail();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + availableSize.y * 0.4f);
+            
+            ImGui::Text("%s", text);
+            // reset font scale
+            ImGui::SetWindowFontScale(1.0f);
+
+        }
+        const std::vector<std::string> files = window.getDraggedPaths();
+        if (files.size() == 1) {
+            sdfl_file_name = files[0];
+            std::thread([=]() {
+                launch_process_blocking({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"});
+            }).detach();
+            page_state = PageState::RENDER_STATE;
+        }
+    }
+    ImGui::End();
+}
+
+void renderMainUI(const yt2d::Window& window) {    
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+    
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
+    window_flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+    window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+    
+    // create the main dockspace
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    
+    ImGui::Begin("MainDockSpace", nullptr, window_flags);
+    ImGui::PopStyleVar(3);
+    
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    
+    ImGui::End();
+    
+    switch (page_state)
+    {
+    case PageState::FILE_STATE:
+        createFileWindow(window);
+        break;
+    case PageState::RENDER_STATE:
+        createRendererWindow();
+        createInfoWindow();
+        createExportWindow();
+        break;
+    
+    default:
+        break;
+    }
+}
+
 int main(void) {
     yt2d::Window window("SDF Renderer", 1280, 720);
     InitImgui(window);
@@ -115,13 +243,13 @@ int main(void) {
 
     /* shader */
     glcompiler::init();
-    Shader* shader = new Shader("sdfl/out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
+    Shader* shader = new Shader("out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
     glcompiler::compile_and_attach_shaders(shader);
 
 
 
 
-    FileWatcher fw("sdfl/out_frag.glsl");
+    FileWatcher fw("out_frag.glsl");
 
     Quad quad;
 
@@ -138,8 +266,9 @@ int main(void) {
 
         if (fw.hasChanged()) {
             delete shader;
-            shader = new Shader("sdfl/out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
+            shader = new Shader("out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
             glcompiler::compile_and_attach_shaders(shader);
+            std::cout << "FILE CHANGED!!!!"<< std::endl;
         }
 
 
@@ -147,46 +276,8 @@ int main(void) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::Begin("Renderer");
-        ImGui::BeginChild("RenderSection");
-        {
-            ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*screenRenderTexture.get_texture()));            
-            ImVec2 size = ImVec2(ImGui::GetWindowSize());
-            ImGui::Image(textureID, size, ImVec2(0, 1), ImVec2(1, 0)); // Flip UVs for correct orientation
 
-            // get correct mouse coords:
-            ImVec2 mouseScreen = ImGui::GetMousePos();
-            ImVec2 imagePos = ImGui::GetItemRectMin(); // Position of top-left corner of ImGui::Image
-            screenSize = ImGui::GetItemRectSize(); // Size of the image
-            // mouseInImageDisplay = ImVec2(mouseScreen.x - imagePos.x, mouseScreen.y - imagePos.y);
-        }
-        ImGui::EndChild();
-        ImGui::End();
-
-        ImGui::Begin("Info");
-        {
-            ImVec2 size = ImGui::GetItemRectSize();
-            ImGui::Text("Name");
-            ImGui::InputText("##name_input", name_buff, NAME_BUFF_SIZE);
-            ImGui::Text("Description");
-            ImGui::InputTextMultiline("##description_input", description_buff, DESCRIPTION_BUFF_SIZE, ImVec2{size.x * 0.8f, 200});
-            widget::DrawTagInput();
-            if (ImGui::Button("Publish", {64, 28})) {
-                Texture2D* tex = screenRenderTexture.get_texture();
-                std::vector<unsigned char> jpeg_data = encode_texture_to_jpeg(tex, 90);
-                create_program(name_buff, description_buff, jpeg_data);
-            }
-        }
-        ImGui::End();
-        ImGui::Begin("Export");
-        {
-            if (ImGui::Button("Export SDF", {64, 28})) {
-                // for now hardcoded path
-                ExportSDFData("testpy/test_sdf_data.bin");
-            }
-        }
-        ImGui::End();
-
+        // draw sdf to texture
         screenRenderTexture.bind();
         window.clear();
         window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
@@ -197,10 +288,10 @@ int main(void) {
             shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
             shader->set<float, 1>("elapsed_time", elapsed_time);
         });
-
         screenRenderTexture.unbind();
 
-
+        renderMainUI(window);
+        
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         window.display();

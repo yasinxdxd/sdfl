@@ -9,6 +9,17 @@
 #include <imstyle.hpp>
 #include <JetBrainsMonoNL-Light_ttf.hpp>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#endif
+
+#include <future>
+#include <thread>
+
 
 ImFont* fontBig;
 ImFont* fontSml;
@@ -20,6 +31,8 @@ void InitImgui(yt2d::Window& window) {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
 
     // ImFontConfig cfg;
     // cfg.FontDataOwnedByAtlas = false;
@@ -58,6 +71,69 @@ void DestroyImgui() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+}
+
+bool launch_process_blocking(const std::vector<std::string>& args) {
+    if (args.empty()) return false;
+
+#if defined(_WIN32)
+    // Build command line
+    std::string cmd;
+    for (const auto& arg : args) {
+        cmd += "\"" + arg + "\" ";
+    }
+
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+
+    if (!CreateProcessA(
+            NULL,
+            cmd.data(),   // command line
+            NULL,
+            NULL,
+            FALSE,
+            0,
+            NULL,
+            NULL,
+            &si,
+            &pi))
+    {
+        std::cerr << "CreateProcess failed. Error: " << GetLastError() << "\n";
+        return false;
+    }
+
+    // Wait until child process exits
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    // Clean up
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return true;
+
+#else
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child
+        std::vector<char*> cargs;
+        for (const auto& arg : args) {
+            cargs.push_back(const_cast<char*>(arg.c_str()));
+        }
+        cargs.push_back(nullptr);
+
+        execvp(cargs[0], cargs.data());
+        perror("execvp failed");
+        _exit(1);
+    } else if (pid > 0) {
+        // parent
+        int status;
+        waitpid(pid, &status, 0);
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    } else {
+        perror("fork failed");
+        return false;
+    }
+#endif
 }
 
 #endif // SDF_APP_HPP

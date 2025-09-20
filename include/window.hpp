@@ -2,6 +2,7 @@
 #define YT2D_WINDOW_HPP
 #include <Definitions.hh>
 #include <string>
+#include <vector>
 #ifndef _glfw3_h_
 struct GLFWwindow;
 #endif
@@ -68,6 +69,8 @@ namespace yt2d
 
         bool isWindowHovered();
 
+        std::vector<std::string> getDraggedPaths() const;
+
     private:
         YT2D_NODISCARD YT2D_STATUS Init(int flags);
 
@@ -108,6 +111,7 @@ namespace _priv::callbacks
     static void glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
     static void glfw_window_focus_callback(GLFWwindow* window, int focused);
     static void glfw_window_always_focus_callback(GLFWwindow* window, int focused);
+    static void glfw_window_drop_callback(GLFWwindow* window, int count, const char** paths);
 #ifdef WIN32
 #else
 #define __stdcall
