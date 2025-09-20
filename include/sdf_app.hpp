@@ -21,7 +21,19 @@ void InitImgui(yt2d::Window& window) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
-    fontBig = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len, 18.0f);
+    // ImFontConfig cfg;
+    // cfg.FontDataOwnedByAtlas = false;
+    // fontBig = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg);
+    // ImGui::GetIO().Fonts->Build();
+
+    // let imgui to free the font
+    unsigned char* fontData = (unsigned char*)malloc(JetBrainsMonoNL_Light_ttf_len);
+    memcpy(fontData, JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len);
+    ImFontConfig cfg;
+    cfg.FontDataOwnedByAtlas = true;  // imgui will free() safely
+    fontBig = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(fontData, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg);
+
+
     // fontSml = ImGui::GetIO().Fonts->AddFontFromFileTTF("JetBrainsMonoNL-Light.ttf", 18.0f);
     // Setup Dear ImGui style
     ImguiStyle();

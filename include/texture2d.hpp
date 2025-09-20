@@ -31,8 +31,11 @@ public:
         return m_gl_texture2d_texture_id;
     }
 
-    inline int getWidth() const { return m_texture2d_width; }
-    inline int getHeight() const {return m_texture2d_height; }
+    inline int get_width() const { return m_texture2d_width; }
+    inline int get_height() const {return m_texture2d_height; }
+    inline int get_channels() const { return m_texture2d_nmbrof_clr_chnnels; }
+    inline const unsigned char* get_data() const { return m_texture2d_data; }
+    unsigned char* read_back_from_gpu();
 private:
     unsigned char* m_texture2d_data;
     int m_texture2d_width,

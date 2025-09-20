@@ -101,3 +101,20 @@ void Texture2D::unbind()
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+unsigned char* Texture2D::read_back_from_gpu() {
+    if (m_texture2d_width == 0 || m_texture2d_height == 0 || m_texture2d_nmbrof_clr_chnnels == 0)
+        return nullptr;
+
+    size_t size = m_texture2d_width * m_texture2d_height * m_texture2d_nmbrof_clr_chnnels;
+    unsigned char* cpu_data = new unsigned char[size];
+
+    bind();
+    GLenum format = GL_RGB;
+    if (m_texture2d_nmbrof_clr_chnnels == 4) format = GL_RGBA;
+    else if (m_texture2d_nmbrof_clr_chnnels == 1) format = GL_RED;
+
+    glGetTexImage(GL_TEXTURE_2D, 0, format, GL_UNSIGNED_BYTE, cpu_data);
+    unbind();
+
+    return cpu_data;
+}
