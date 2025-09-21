@@ -271,8 +271,10 @@ int main(void) {
     Shader* shader = new Shader("out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
     glcompiler::compile_and_attach_shaders(shader);
 
-
-
+    // start the local bridge server
+    std::thread([=]() {
+        launch_process_blocking({"./bridge/bridge"});
+    }).detach();
 
     FileWatcher fw("out_frag.glsl");
 
@@ -326,6 +328,9 @@ int main(void) {
         frame_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
         elapsed_time += frame_time / 1000.0;
     }
+
+    // shutdown server
+    shutdown_server();
 
     delete shader;
     delete screenTexture;

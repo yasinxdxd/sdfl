@@ -62,4 +62,15 @@ void publish_program(const char* name,
     }
 }
 
+void shutdown_server() {
+    httplib::Client cli("http://localhost:9999");
+    auto res = cli.Get("/shutdown");
+    
+    if (res && res->status == 200) {
+        std::cout << "Server shutdown successfully\n";
+    } else {
+        std::cerr << "Failed to shutdown server\n";
+    }
+}
+
 #endif // SDF_CLIENT_HPP

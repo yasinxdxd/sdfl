@@ -6,3 +6,5 @@ sdf
 sdflc
 test*
 imgui.ini
+bridge/bridge
+ast_sequence.txt

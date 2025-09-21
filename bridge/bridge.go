@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 )
 
-// Request to Flask
+// Request to actual server
 type ProgramRequest struct {
 	Code                   string   `json:"code"`
 	Description            string   `json:"description"`
@@ -26,7 +28,9 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
 	description := r.FormValue("description")
 	code := r.FormValue("code")
-	sequence := r.Form["sequence_representation"] // çoklu gönderim için
+	sequence := r.FormValue("sequence_representation")
+	sequence_representation := strings.Split(sequence, "\n")
+	fmt.Printf("%v", sequence_representation)
 
 	// optional preview_image
 	var previewImage []byte
@@ -41,10 +45,10 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build JSON for Flask
+	// build JSON for actual server
 	reqBody := ProgramRequest{
 		Code:                   code,
-		SequenceRepresentation: sequence,
+		SequenceRepresentation: sequence_representation,
 		Description:            description,
 		Name:                   name,
 		PreviewImage:           previewImage,
@@ -52,15 +56,10 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, _ := json.Marshal(reqBody)
 
-	// Debug log
-	fmt.Println("=== Data to be sent to Flask ===")
-	fmt.Println(string(jsonBytes))
-	fmt.Println("=== End of Data ===")
-
-	// Forward to Flask
+	// forward to actual server
 	resp, err := http.Post("http://localhost:5000/program", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
-		http.Error(w, "Flask unreachable", http.StatusBadGateway)
+		http.Error(w, "Remote Server unreachable!", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -69,8 +68,21 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
+func shutdownHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Bridge server shutting down"))
+	go func() {
+		fmt.Println("Shutdown requested. Exiting...")
+		os.Exit(0)
+	}()
+}
+
 func main() {
-	http.HandleFunc("/program", cppHandler) // C++ posts here
+	http.HandleFunc("/program", cppHandler)       // C++ posts here
+	http.HandleFunc("/shutdown", shutdownHandler) // Shutdown endpoint
+
 	fmt.Println("Bridge server listening on :9999")
-	http.ListenAndServe(":9999", nil)
+	if err := http.ListenAndServe(":9999", nil); err != nil {
+		fmt.Println("Server stopped:", err)
+	}
 }
