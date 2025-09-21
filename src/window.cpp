@@ -485,6 +485,8 @@ void yt2d::Window::setViewport(int x, int y, int w, int h)
 }
 
 std::vector<std::string> yt2d::Window::getDraggedPaths() const
-{    
-    return g_drag_paths;
+{   
+    auto result = g_drag_paths;
+    if (!g_drag_paths.empty()) g_drag_paths.clear();
+    return result;
 }

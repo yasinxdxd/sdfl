@@ -126,8 +126,19 @@ PageState page_state = PageState::FILE_STATE;
 
 
 void createRendererWindow() {
-    ImGui::Begin("Renderer");
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Renderer", nullptr, window_flags);
     {
+        // Back button in top left corner
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2)); // Make button smaller
+        if (ImGui::Button("< Back")) {
+            page_state = PageState::FILE_STATE;
+        }
+        ImGui::PopStyleVar();
+        
+        // Add some spacing between button and image
+        ImGui::Spacing();
+
         ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*screenRenderTexture.get_texture()));
         ImVec2 size = ImGui::GetContentRegionAvail(); // Use available space instead of window size
         ImGui::Image(textureID, size, ImVec2(0, 1), ImVec2(1, 0)); // Flip UVs for correct orientation
@@ -166,8 +177,11 @@ void createInfoWindow() {
             } catch (const std::exception& e) {
                 std::cerr << e.what() << std::endl;
             }
-
-            publish_program(name_buff, description_buff, code, sequence, jpeg_data);
+            // debug
+            for (auto& t : input_tags) {
+                std::cout << t << std::endl;
+            }
+            publish_program(name_buff, description_buff, code, sequence, jpeg_data, input_tags);
         }
     }
     ImGui::End();
@@ -185,9 +199,9 @@ void createExportWindow() {
 }
 
 void createFileWindow(const yt2d::Window& window) {
-    ImGui::Begin("Open File");
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Open File", nullptr, window_flags);
     {
-        // ImGui::Text("Drag and Drop an .sdfl file");
         {
             const char* text = "Drag and Drop an .sdfl file";
             ImGui::SetWindowFontScale(2.0f); // 2x bigger
@@ -208,10 +222,15 @@ void createFileWindow(const yt2d::Window& window) {
         const std::vector<std::string> files = window.getDraggedPaths();
         if (files.size() == 1) {
             sdfl_file_name = files[0];
-            launch_process_blocking({"./sdfl/sdflc", sdfl_file_name});
-            std::thread([=]() {
-                launch_process_blocking({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"});
-            }).detach();
+            // launch_process_blocking({"./sdfl/sdflc", sdfl_file_name});
+            // std::thread([=]() {
+            //     launch_process_blocking({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"});
+            // }).detach();
+            std::cout << "FILE_SIZE: " << files.size() << std::endl;
+            if (SDFLCompiler.is_running()) {
+                SDFLCompiler.stop_watch();
+            }
+            SDFLCompiler.start_watch(sdfl_file_name);
             page_state = PageState::RENDER_STATE;
         }
     }
@@ -249,8 +268,8 @@ void renderMainUI(const yt2d::Window& window) {
         break;
     case PageState::RENDER_STATE:
         createRendererWindow();
-        createInfoWindow();
         createExportWindow();
+        createInfoWindow();
         break;
     
     default:
@@ -304,18 +323,20 @@ int main(void) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // draw sdf to texture
-        screenRenderTexture.bind();
-        window.clear();
-        window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
-
-        // render
-        render(quad, 6, shader, [&](Shader* shader) {
-            // send uniforms
-            shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
-            shader->set<float, 1>("elapsed_time", elapsed_time);
-        });
-        screenRenderTexture.unbind();
+        if (page_state == PageState::RENDER_STATE) {
+            // draw sdf to texture
+            screenRenderTexture.bind();
+            window.clear();
+            window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
+    
+            // render
+            render(quad, 6, shader, [&](Shader* shader) {
+                // send uniforms
+                shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
+                shader->set<float, 1>("elapsed_time", elapsed_time);
+            });
+            screenRenderTexture.unbind();
+        }
 
         renderMainUI(window);
         

@@ -136,4 +136,172 @@ bool launch_process_blocking(const std::vector<std::string>& args) {
 #endif
 }
 
+bool launch_process_with_interrupt(const std::vector<std::string>& args, 
+                                 const std::atomic<bool>& stop_flag) {
+    if (args.empty()) return false;
+
+#if defined(_WIN32)
+    // Build command line
+    std::string cmd;
+    for (const auto& arg : args) {
+        cmd += "\"" + arg + "\" ";
+    }
+
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+
+    if (!CreateProcessA(
+            NULL,
+            cmd.data(),
+            NULL,
+            NULL,
+            FALSE,
+            0,
+            NULL,
+            NULL,
+            &si,
+            &pi))
+    {
+        std::cerr << "CreateProcess failed. Error: " << GetLastError() << "\n";
+        return false;
+    }
+
+    // Wait with periodic checks for stop flag
+    bool process_finished = false;
+    bool killed = false;
+    
+    while (!process_finished && !killed) {
+        DWORD wait_result = WaitForSingleObject(pi.hProcess, 100); // 100ms timeout
+        
+        if (wait_result == WAIT_OBJECT_0) {
+            // Process finished naturally
+            process_finished = true;
+        } else if (wait_result == WAIT_TIMEOUT) {
+            // Check if we should stop
+            if (stop_flag.load()) {
+                // Terminate the process
+                TerminateProcess(pi.hProcess, 1);
+                WaitForSingleObject(pi.hProcess, INFINITE); // Wait for termination
+                killed = true;
+            }
+        } else {
+            // Error occurred
+            std::cerr << "WaitForSingleObject failed. Error: " << GetLastError() << "\n";
+            break;
+        }
+    }
+
+    // Clean up
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return process_finished && !killed;
+
+#else
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child process
+        std::vector<char*> cargs;
+        for (const auto& arg : args) {
+            cargs.push_back(const_cast<char*>(arg.c_str()));
+        }
+        cargs.push_back(nullptr);
+
+        execvp(cargs[0], cargs.data());
+        perror("execvp failed");
+        _exit(1);
+    } else if (pid > 0) {
+        // parent process
+        int status;
+        bool process_finished = false;
+        bool killed = false;
+        
+        while (!process_finished && !killed) {
+            // Non-blocking wait
+            pid_t result = waitpid(pid, &status, WNOHANG);
+            
+            if (result == pid) {
+                // Process finished
+                process_finished = true;
+            } else if (result == 0) {
+                // Process still running, check stop flag
+                if (stop_flag.load()) {
+                    // Send SIGTERM first (graceful)
+                    kill(pid, SIGTERM);
+                    
+                    // Give it a moment to terminate gracefully
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    
+                    // Check if it's still running
+                    result = waitpid(pid, &status, WNOHANG);
+                    if (result == 0) {
+                        // Still running, force kill
+                        kill(pid, SIGKILL);
+                        waitpid(pid, &status, 0); // Wait for it to die
+                    }
+                    killed = true;
+                } else {
+                    // Brief sleep to avoid busy waiting
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            } else {
+                // Error in waitpid
+                perror("waitpid failed");
+                break;
+            }
+        }
+        
+        return process_finished && !killed && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    } else {
+        perror("fork failed");
+        return false;
+    }
+#endif
+}
+
+class SDFLCManager {
+private:
+    std::thread watch_thread;
+    std::atomic<bool> stop_flag{false};
+    std::atomic<bool> is_watch_running{false};
+    
+public:
+    void start_watch(const std::string& sdfl_file_name) {        
+        // initial compilation
+        launch_process_blocking({"./sdfl/sdflc", sdfl_file_name});
+        
+        // start watch process
+        stop_flag = false;
+        is_watch_running = true;
+        
+        watch_thread = std::thread([this, sdfl_file_name]() {
+            launch_process_with_interrupt({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"}, 
+                                        stop_flag);
+            is_watch_running = false; // Mark as finished when thread exits
+        });
+    }
+    
+    void stop_watch() {
+        if (!is_watch_running.load()) {
+            return; // Already stopped or never started
+        }
+        
+        stop_flag = true;
+        if (watch_thread.joinable()) {
+            watch_thread.join();
+        }
+        // is_watch_running will be set to false by the thread itself
+    }
+    
+    bool is_running() const {
+        return is_watch_running.load();
+    }
+    
+    ~SDFLCManager() {
+        stop_watch();
+    }
+};
+
+SDFLCManager SDFLCompiler;
+
 #endif // SDF_APP_HPP

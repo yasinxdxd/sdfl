@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +17,8 @@ type ProgramRequest struct {
 	Description            string   `json:"description"`
 	SequenceRepresentation []string `json:"sequence_representation"`
 	Name                   string   `json:"name"`
-	PreviewImage           []byte   `json:"preview_image,omitempty"`
+	PreviewImage           string   `json:"preview_image"` // base64 string
+	Tags                   []string `json:"tags"`
 }
 
 func cppHandler(w http.ResponseWriter, r *http.Request) {
@@ -29,34 +31,42 @@ func cppHandler(w http.ResponseWriter, r *http.Request) {
 	description := r.FormValue("description")
 	code := r.FormValue("code")
 	sequence := r.FormValue("sequence_representation")
-	sequence_representation := strings.Split(sequence, "\n")
-	fmt.Printf("%v", sequence_representation)
+	sequenceRepresentation := strings.Split(sequence, "\n")
 
-	// optional preview_image
-	var previewImage []byte
-	if file, _, err := r.FormFile("preview_image"); err == nil {
-		defer file.Close()
-		previewImage, _ = io.ReadAll(file)
+	// Collect all tags (multiple fields named "tags")
+	tags := r.Form["tags"]
+
+	// Read preview_image (required now)
+	file, _, err := r.FormFile("preview_image")
+	if err != nil {
+		http.Error(w, "preview_image is required", http.StatusBadRequest)
+		return
 	}
+	defer file.Close()
+	previewBytes, _ := io.ReadAll(file)
 
-	// Check if required fields exist
-	if code == "" || len(sequence) == 0 || name == "" || description == "" {
-		http.Error(w, "missing required fields", http.StatusBadRequest)
+	// Base64 encode preview image before sending to Flask
+	previewB64 := base64.StdEncoding.EncodeToString(previewBytes)
+
+	// Validate required fields
+	if code == "" || len(sequenceRepresentation) == 0 || name == "" || description == "" || len(tags) < 3 {
+		http.Error(w, "missing required fields or tags < 3", http.StatusBadRequest)
 		return
 	}
 
-	// build JSON for actual server
+	// Build JSON for actual server
 	reqBody := ProgramRequest{
 		Code:                   code,
-		SequenceRepresentation: sequence_representation,
+		SequenceRepresentation: sequenceRepresentation,
 		Description:            description,
 		Name:                   name,
-		PreviewImage:           previewImage,
+		PreviewImage:           previewB64, // base64 string
+		Tags:                   tags,       // []string
 	}
 
 	jsonBytes, _ := json.Marshal(reqBody)
 
-	// forward to actual server
+	// Forward to actual Flask server
 	resp, err := http.Post("http://localhost:5000/program", "application/json", bytes.NewReader(jsonBytes))
 	if err != nil {
 		http.Error(w, "Remote Server unreachable!", http.StatusBadGateway)

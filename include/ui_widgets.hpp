@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-static std::vector<std::string> tags;
+std::vector<std::string> input_tags;
 #define TAG_BUFF_SIZE 128
 static char inputBuf[TAG_BUFF_SIZE] = "";
 static bool shouldAddTag = false;
@@ -31,14 +31,14 @@ void DrawTagInput() {
     ImGui::Text("Tags");
     ImGui::NewLine();
 
-    // Render existing tags
-    for (size_t i = 0; i < tags.size(); i++) {
+    // Render existing input_tags
+    for (size_t i = 0; i < input_tags.size(); i++) {
         ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 1.0f, 0.8f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
-        if (ImGui::Button((tags[i] + " x").c_str())) {
-            tags.erase(tags.begin() + i); // delete tag
+        if (ImGui::Button((input_tags[i] + " x").c_str())) {
+            input_tags.erase(input_tags.begin() + i); // delete tag
             i--;
         }
         ImGui::PopStyleColor(3);
@@ -63,7 +63,7 @@ void DrawTagInput() {
                          ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCharFilter,
                          InputTextCallback)) {
         if (strlen(inputBuf) > 0) {
-            tags.push_back(inputBuf);
+            input_tags.push_back(inputBuf);
             memset(inputBuf, 0, TAG_BUFF_SIZE);
         }
         // Request focus for next frame after Enter
@@ -73,7 +73,7 @@ void DrawTagInput() {
     // handle comma-triggered tag addition
     if (shouldAddTag) {
         if (strlen(inputBuf) > 0) {
-            tags.push_back(inputBuf);
+            input_tags.push_back(inputBuf);
         }
         shouldAddTag = false;
         // Request focus for next frame after comma

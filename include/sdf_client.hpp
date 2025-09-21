@@ -11,7 +11,8 @@ void publish_program(const char* name,
                     const char* description,
                     const std::string& code,
                     const std::string& sequence_representation,
-                    const std::vector<uint8_t>& preview_image)
+                    const std::vector<uint8_t>& preview_image,
+                    const std::vector<std::string>& tags)
 {
     httplib::Client cli("http://localhost:9999");
 
@@ -32,6 +33,11 @@ void publish_program(const char* name,
 
     add_field("code", code);
     add_field("sequence_representation", sequence_representation);
+
+    // add tags (multiple fields with same name "tags")
+    for (const auto& tag : tags) {
+        add_field("tags", tag);
+    }
 
     // preview_image field
     body += "--" + boundary + "\r\n";
