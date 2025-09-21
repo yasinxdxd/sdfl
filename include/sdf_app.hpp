@@ -296,10 +296,6 @@ public:
     bool is_running() const {
         return is_watch_running.load();
     }
-    
-    ~SDFLCManager() {
-        stop_watch();
-    }
 };
 
 SDFLCManager SDFLCompiler;

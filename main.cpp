@@ -349,6 +349,10 @@ int main(void) {
         elapsed_time += frame_time / 1000.0;
     }
 
+    if (SDFLCompiler.is_running()) {
+        SDFLCompiler.stop_watch();
+    }
+
     // shutdown server
     shutdown_server();
 
