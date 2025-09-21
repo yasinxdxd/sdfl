@@ -323,20 +323,19 @@ int main(void) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        if (page_state == PageState::RENDER_STATE) {
-            // draw sdf to texture
-            screenRenderTexture.bind();
-            window.clear();
-            window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
-    
+        // draw sdf to texture
+        screenRenderTexture.bind();
+        window.clear();
+        window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
+        if (page_state == PageState::RENDER_STATE) {    
             // render
             render(quad, 6, shader, [&](Shader* shader) {
                 // send uniforms
                 shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
                 shader->set<float, 1>("elapsed_time", elapsed_time);
             });
-            screenRenderTexture.unbind();
         }
+        screenRenderTexture.unbind();
 
         renderMainUI(window);
         

@@ -275,7 +275,7 @@ public:
         is_watch_running = true;
         
         watch_thread = std::thread([this, sdfl_file_name]() {
-            launch_process_with_interrupt({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"}, 
+            launch_process_with_interrupt({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=1000"}, 
                                         stop_flag);
             is_watch_running = false; // Mark as finished when thread exits
         });
