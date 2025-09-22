@@ -7,6 +7,14 @@
 #include <string>
 #include <chrono>
 
+struct ProgramMetaData {
+    uint64_t program_id;
+    std::string name;
+    std::string created_at;
+    std::vector<uint8_t> preview_image;
+    std::vector<std::string> tags;
+};
+
 void publish_program(const char* name,
                     const char* description,
                     const std::string& code,
@@ -67,6 +75,82 @@ void publish_program(const char* name,
         std::cerr << "Request failed\n";
     }
 }
+
+void update_cache() {
+    httplib::Client cli("http://localhost:9999");
+    auto res = cli.Get("/programs");
+
+    if (res) {
+        std::cout << "Status: " << res->status << "\n";
+        std::cout << "Body: " << res->body << "\n";
+    } else {
+        std::cerr << "Request failed\n";
+    }
+}
+
+std::vector<ProgramMetaData> get_programs_from_cache(const std::string& cache_path = "programs_cache.bin") {
+    std::vector<ProgramMetaData> programs;
+
+    std::ifstream file(cache_path, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open cache file, updating cache..." << cache_path << "\n";
+    }
+    while (!file.is_open()) {
+        update_cache();
+        file.open(cache_path, std::ios::binary);
+    }
+
+    auto read_uint64 = [&](uint64_t& val) {
+        file.read(reinterpret_cast<char*>(&val), sizeof(uint64_t));
+        return !file.fail();
+    };
+
+    auto read_string = [&](std::string& s) {
+        uint64_t len;
+        if (!read_uint64(len)) return false;
+        if (len > (1ull << 30)) return false; // sanity check: avoid absurd sizes
+        s.resize(len);
+        if (len > 0) {
+            file.read(&s[0], len);
+        }
+        return !file.fail();
+    };
+
+    auto read_bytes = [&](std::vector<uint8_t>& v) {
+        uint64_t len;
+        if (!read_uint64(len)) return false;
+        if (len > (1ull << 30)) return false; // sanity check
+        v.resize(len);
+        if (len > 0) {
+            file.read(reinterpret_cast<char*>(v.data()), len);
+        }
+        return !file.fail();
+    };
+
+    uint64_t program_count;
+    if (!read_uint64(program_count)) return programs;
+
+    for (uint64_t i = 0; i < program_count; ++i) {
+        ProgramMetaData p;
+
+        if (!read_uint64(p.program_id)) break;
+        if (!read_string(p.name)) break;
+        if (!read_string(p.created_at)) break;
+        if (!read_bytes(p.preview_image)) break;
+
+        uint64_t tag_count;
+        if (!read_uint64(tag_count)) break;
+        p.tags.resize(tag_count);
+        for (uint64_t t = 0; t < tag_count; ++t) {
+            if (!read_string(p.tags[t])) break;
+        }
+
+        programs.push_back(std::move(p));
+    }
+
+    return programs;
+}
+
 
 void shutdown_server() {
     httplib::Client cli("http://localhost:9999");

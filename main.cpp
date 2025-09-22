@@ -29,10 +29,23 @@ char description_buff[DESCRIPTION_BUFF_SIZE] = {0};
 char name_buff[NAME_BUFF_SIZE] = {0};
 
 std::string sdfl_file_name;
+std::vector<ProgramMetaData> sdfl_programs;
+std::vector<Texture2D*> program_previev_textures;
 
 
 int resolution = 256;
 int workGroupsPerAxis = (resolution + 7) / 8; // ceil
+
+std::vector<Texture2D*> create_preview_textures(std::vector<ProgramMetaData> programs) {
+    std::vector<Texture2D*> textures;
+    for (size_t i = 0; i < programs.size(); i++) {
+        Texture2D* texture = new Texture2D();
+        texture->load_texture_from_memory(programs[i].preview_image.data(), programs[i].preview_image.size());
+        texture->generate_texture();
+        textures.push_back(std::move(texture));
+    }
+    return textures;
+}
 
 
 void writeSDFToBinary(const std::vector<float>& sdfData, int resolution, 
@@ -200,7 +213,7 @@ void createExportWindow() {
 
 void createFileWindow(const yt2d::Window& window) {
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
-    ImGui::Begin("Open File", nullptr, window_flags);
+    if (ImGui::Begin("Open File", nullptr, window_flags))
     {
         {
             const char* text = "Drag and Drop an .sdfl file";
@@ -237,6 +250,38 @@ void createFileWindow(const yt2d::Window& window) {
     ImGui::End();
 }
 
+int programs_columns = 1;
+void createProgramsWindow(const yt2d::Window& window) {
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+    if (ImGui::Begin("SDFL Programs", nullptr, window_flags))
+    {
+        ImGui::SliderInt("columns", &programs_columns, 1, 8);
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh")) {
+            update_cache();
+            sdfl_programs = get_programs_from_cache();
+        }
+
+        int cols = programs_columns * 2;
+        ImGui::Columns(cols);
+        char name[128];
+        for (size_t i = 0; i < sdfl_programs.size(); i++) {
+            if (i % cols == 0) ImGui::Separator();
+            ImGui::Button(sdfl_programs[i].name.c_str());
+            
+            
+            ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*program_previev_textures[i]));
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImGui::Image(textureID, {size.x, size.x}, ImVec2(0, 1), ImVec2(1, 0));
+            
+            
+            ImGui::NextColumn();
+        }
+        
+    }
+    ImGui::End();
+}
+
 void renderMainUI(const yt2d::Window& window) {    
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -264,6 +309,7 @@ void renderMainUI(const yt2d::Window& window) {
     switch (page_state)
     {
     case PageState::FILE_STATE:
+        createProgramsWindow(window);
         createFileWindow(window);
         break;
     case PageState::RENDER_STATE:
@@ -297,8 +343,11 @@ int main(void) {
 
     FileWatcher fw("out_frag.glsl");
 
-    Quad quad;
+    sdfl_programs = get_programs_from_cache();
+    program_previev_textures = create_preview_textures(sdfl_programs);
 
+    
+    Quad quad;
     int frame_time = 0;
     float elapsed_time = 0.f;
     
@@ -355,6 +404,10 @@ int main(void) {
 
     // shutdown server
     shutdown_server();
+
+    for (size_t i = 0; i < program_previev_textures.size(); i++) {
+        delete program_previev_textures[i];
+    }
 
     delete shader;
     delete screenTexture;

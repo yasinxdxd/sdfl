@@ -14,6 +14,7 @@ public:
     ~Texture2D();
 
     bool load_texture(const char* path);
+    bool load_texture_from_memory(const unsigned char* buffer, unsigned int len);
     void create_texture(int width, int height, unsigned char* data, int color_channels = 3);
     void generate_texture();
     void delete_texture();

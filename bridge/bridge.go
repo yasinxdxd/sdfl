@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 )
 
 // Request to actual server
@@ -21,7 +23,7 @@ type ProgramRequest struct {
 	Tags                   []string `json:"tags"`
 }
 
-func cppHandler(w http.ResponseWriter, r *http.Request) {
+func insertProgramHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -87,9 +89,117 @@ func shutdownHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+type ProgramMetadata struct {
+	ProgramID    uint64   `json:"program_id"`
+	Name         string   `json:"name"`
+	PreviewImage string   `json:"preview_image"` // base64
+	Tags         []string `json:"tags"`
+	CreatedAt    string   `json:"created_at"`
+}
+
+var cacheLock sync.RWMutex
+
+const cacheFile = "programs_cache.bin"
+
+func updateCache(limit int) error {
+	resp, err := http.Get(fmt.Sprintf("http://localhost:5000/programs?limit=%d", limit))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Flask error: %s", string(body))
+	}
+
+	// Decode JSON from Flask
+	var programs []ProgramMetadata
+	if err := json.NewDecoder(resp.Body).Decode(&programs); err != nil {
+		return err
+	}
+
+	// Open file for binary writing
+	cacheLock.Lock()
+	defer cacheLock.Unlock()
+	f, err := os.Create(cacheFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Write number of programs
+	if err := binary.Write(f, binary.LittleEndian, uint64(len(programs))); err != nil {
+		return err
+	}
+
+	for _, p := range programs {
+		// program_id
+		if err := binary.Write(f, binary.LittleEndian, p.ProgramID); err != nil {
+			return err
+		}
+
+		// name
+		if err := writeString(f, p.Name); err != nil {
+			return err
+		}
+
+		// created_at
+		if err := writeString(f, p.CreatedAt); err != nil {
+			return err
+		}
+
+		// preview_image (decode from base64 into raw bytes)
+		imgBytes, err := base64.StdEncoding.DecodeString(p.PreviewImage)
+		if err != nil {
+			return err
+		}
+		if err := writeBytes(f, imgBytes); err != nil {
+			return err
+		}
+
+		// tags
+		if err := binary.Write(f, binary.LittleEndian, uint64(len(p.Tags))); err != nil {
+			return err
+		}
+		for _, tag := range p.Tags {
+			if err := writeString(f, tag); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func writeString(w io.Writer, s string) error {
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(s))); err != nil {
+		return err
+	}
+	_, err := w.Write([]byte(s))
+	return err
+}
+
+func writeBytes(w io.Writer, b []byte) error {
+	if err := binary.Write(w, binary.LittleEndian, uint64(len(b))); err != nil {
+		return err
+	}
+	_, err := w.Write(b)
+	return err
+}
+
+func getProgramsHandler(w http.ResponseWriter, r *http.Request) {
+	if err := updateCache(50); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("Cache updated"))
+}
+
 func main() {
-	http.HandleFunc("/program", cppHandler)       // C++ posts here
-	http.HandleFunc("/shutdown", shutdownHandler) // Shutdown endpoint
+	http.HandleFunc("/program", insertProgramHandler) // C++ posts here
+	http.HandleFunc("/shutdown", shutdownHandler)     // Shutdown endpoint
+	http.HandleFunc("/programs", getProgramsHandler)
 
 	fmt.Println("Bridge server listening on :9999")
 	if err := http.ListenAndServe(":9999", nil); err != nil {

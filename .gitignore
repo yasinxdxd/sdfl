@@ -8,3 +8,4 @@ test*
 imgui.ini
 bridge/bridge
 ast_sequence.txt
+programs_cache.bin
