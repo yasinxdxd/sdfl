@@ -30,7 +30,7 @@ char name_buff[NAME_BUFF_SIZE] = {0};
 
 std::string sdfl_file_name;
 std::vector<ProgramMetaData> sdfl_programs;
-std::vector<Texture2D*> program_previev_textures;
+std::vector<Texture2D*> program_preview_textures;
 
 
 int resolution = 256;
@@ -45,6 +45,12 @@ std::vector<Texture2D*> create_preview_textures(std::vector<ProgramMetaData> pro
         textures.push_back(std::move(texture));
     }
     return textures;
+}
+
+void delete_preview_textures() {
+    for (size_t i = 0; i < program_preview_textures.size(); i++) {
+        delete program_preview_textures[i];
+    }
 }
 
 
@@ -257,9 +263,16 @@ void createProgramsWindow(const yt2d::Window& window) {
     {
         ImGui::SliderInt("columns", &programs_columns, 1, 8);
         ImGui::SameLine();
+
+        // put button at the end of row
+        float buttonWidth = ImGui::CalcTextSize("Refresh").x + ImGui::GetStyle().FramePadding.x * 2;
+        float fullWidth = ImGui::GetContentRegionAvail().x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + fullWidth - buttonWidth);
         if (ImGui::Button("Refresh")) {
             update_cache();
+            delete_preview_textures();
             sdfl_programs = get_programs_from_cache();
+            program_preview_textures = create_preview_textures(sdfl_programs);
         }
 
         int cols = programs_columns * 2;
@@ -267,12 +280,31 @@ void createProgramsWindow(const yt2d::Window& window) {
         char name[128];
         for (size_t i = 0; i < sdfl_programs.size(); i++) {
             if (i % cols == 0) ImGui::Separator();
-            ImGui::Button(sdfl_programs[i].name.c_str());
+            ImGui::Text("Name: %s", sdfl_programs[i].name.c_str());
+            ImGui::Text("Date: %s", sdfl_programs[i].created_at.c_str());            
             
-            
-            ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*program_previev_textures[i]));
+            ImTextureID textureID = (ImTextureID)(intptr_t)((unsigned int)(*program_preview_textures[i]));
+            float ratio = (float)program_preview_textures[i]->get_height() / program_preview_textures[i]->get_width();
             ImVec2 size = ImGui::GetContentRegionAvail();
-            ImGui::Image(textureID, {size.x, size.x}, ImVec2(0, 1), ImVec2(1, 0));
+            char programName[64];
+            sprintf(programName, "##program%ld", i);
+            if (ImGui::ImageButton(programName, textureID, {size.x, size.x * ratio}, ImVec2(0, 1), ImVec2(1, 0))) {
+
+            }
+            
+
+            char tagLabels[256];
+            ImGui::Text("Tags: ");
+            for (size_t j = 0; j < sdfl_programs[i].tags.size(); j++) {
+                sprintf(tagLabels, "%s##tags%ld%ld", (sdfl_programs[i].tags[j]).c_str(), i, j);
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 1.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1f, 0.8f, 0.9f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.7f, 1.0f));
+                // ImGui::LabelText(tagLabels, "%s", );
+                ImGui::Button(tagLabels);
+                ImGui::PopStyleColor(3);
+            }
             
             
             ImGui::NextColumn();
@@ -344,7 +376,7 @@ int main(void) {
     FileWatcher fw("out_frag.glsl");
 
     sdfl_programs = get_programs_from_cache();
-    program_previev_textures = create_preview_textures(sdfl_programs);
+    program_preview_textures = create_preview_textures(sdfl_programs);
 
     
     Quad quad;
@@ -405,9 +437,7 @@ int main(void) {
     // shutdown server
     shutdown_server();
 
-    for (size_t i = 0; i < program_previev_textures.size(); i++) {
-        delete program_previev_textures[i];
-    }
+    delete_preview_textures();
 
     delete shader;
     delete screenTexture;
