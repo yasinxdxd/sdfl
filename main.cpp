@@ -140,6 +140,7 @@ std::string read_file_to_string(const std::string& filepath) {
 enum class PageState {
     RENDER_STATE,
     FILE_STATE,
+    GENERATE_STATE,
 };
 PageState page_state = PageState::FILE_STATE;
 
@@ -217,6 +218,33 @@ void createExportWindow() {
     ImGui::End();
 }
 
+void createGenerateWindow() {
+    static int selected = 0;
+    ImGui::Begin("Generate");
+    {
+        ImVec2 size = ImGui::GetWindowSize();
+        ImGui::BeginChild("##Radiobuttons", ImVec2(size.x, size.y * 0.2));
+        if (ImGui::RadioButton("Random Generate", selected == 0)) selected = 0;
+        if (ImGui::RadioButton("Text Base Generate", selected == 1)) selected = 1;
+        ImGui::EndChild();
+        ImGui::NewLine();
+        if (selected == 0) {
+            if (ImGui::Button("Generate Random Model", {256, 28})) {
+                generate_random_program();
+                launch_process_blocking({"./sdfl/sdflc", "--seq", "generated_random_sequence.seq"});
+            }
+        } else {
+            char promptBuff[256] = {0};
+            ImGui::InputTextWithHint("##prompt", "Prompt", promptBuff, 256);
+            ImGui::NewLine();
+            if (ImGui::Button("Generate Text Based Model", {256, 28})) {
+                
+            }
+        }
+    }
+    ImGui::End();
+}
+
 void createFileWindow(const yt2d::Window& window) {
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
     if (ImGui::Begin("Open File", nullptr, window_flags))
@@ -237,14 +265,22 @@ void createFileWindow(const yt2d::Window& window) {
             // reset font scale
             ImGui::SetWindowFontScale(1.0f);
 
+            // generate page button
+            float padding = 20.0f; // distance from window edges
+            ImVec2 buttonSize = ImVec2(120, 40); // button size
+            ImVec2 buttonPos = ImVec2(
+                windowSize.x - buttonSize.x - padding,
+                windowSize.y - buttonSize.y - padding
+            );
+
+            ImGui::SetCursorPos(buttonPos);
+            if (ImGui::Button("Generate", buttonSize)) {
+                page_state = PageState::GENERATE_STATE;
+            }
         }
         const std::vector<std::string> files = window.getDraggedPaths();
         if (files.size() == 1) {
             sdfl_file_name = files[0];
-            // launch_process_blocking({"./sdfl/sdflc", sdfl_file_name});
-            // std::thread([=]() {
-            //     launch_process_blocking({"./sdfl/sdflc", sdfl_file_name, "--watch", "--interval=0"});
-            // }).detach();
             std::cout << "FILE_SIZE: " << files.size() << std::endl;
             if (SDFLCompiler.is_running()) {
                 SDFLCompiler.stop_watch();
@@ -349,7 +385,9 @@ void renderMainUI(const yt2d::Window& window) {
         createExportWindow();
         createInfoWindow();
         break;
-    
+    case PageState::GENERATE_STATE:
+        createRendererWindow();
+        createGenerateWindow();
     default:
         break;
     }
@@ -408,7 +446,7 @@ int main(void) {
         screenRenderTexture.bind();
         window.clear();
         window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
-        if (page_state == PageState::RENDER_STATE) {    
+        if (page_state == PageState::RENDER_STATE || page_state == PageState::GENERATE_STATE) {    
             // render
             render(quad, 6, shader, [&](Shader* shader) {
                 // send uniforms
