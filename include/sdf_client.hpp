@@ -162,6 +162,17 @@ void generate_random_program() {
     }
 }
 
+void generate_mixed_random_program() {
+    httplib::Client cli("http://localhost:9999");
+    auto res = cli.Get("/generate_mixed_random");
+
+    if (res && res->status == 200) {
+        std::cout << "Status: " << res->status << "\n";
+    } else {
+        std::cerr << "Request failed: " << res->status <<"\n";
+    }
+}
+
 
 void shutdown_server() {
     httplib::Client cli("http://localhost:9999");

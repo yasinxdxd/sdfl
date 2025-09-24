@@ -10,3 +10,4 @@ bridge/bridge
 ast_sequence.txt
 programs_cache.bin
 generated_random_sequence.seq
+generated_mixed_random_sequence.seq

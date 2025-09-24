@@ -207,7 +207,7 @@ func generateProgramHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send actual server
 	reqBody := GenerateProgramRequest{
-		StateSize: 6,
+		StateSize: 8,
 		MaxLength: 500,
 	}
 
@@ -244,11 +244,60 @@ func generateProgramHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Sequence written to generated_random_sequence.seq\n"))
 }
 
+type GenerateMixedProgramRequest struct {
+	StateSizes  int      `json:"state_sizes"`
+	MaxLength   int      `json:"max_length"`
+	StartTokens []string `json:"start_tokens",omitempty`
+}
+
+func generateMixedProgramHandler(w http.ResponseWriter, r *http.Request) {
+	// handle c++
+
+	// send actual server
+	reqBody := GenerateMixedProgramRequest{
+		// StateSize: 8,
+		MaxLength: 500,
+	}
+
+	jsonBytes, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post("http://localhost:5000/generate_mixed_global", "application/json", bytes.NewReader(jsonBytes))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	defer resp.Body.Close()
+
+	// decode JSON response
+	var data struct {
+		Sequence []string `json:"sequence"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// write sequence to file
+	f, err := os.Create("generated_mixed_random_sequence.seq")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	for _, line := range data.Sequence {
+		_, _ = f.WriteString(line + "\n")
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Sequence written to generated_mixed_random_sequence.seq\n"))
+}
+
 func main() {
 	http.HandleFunc("/program", insertProgramHandler) // C++ posts here
 	http.HandleFunc("/shutdown", shutdownHandler)     // Shutdown endpoint
 	http.HandleFunc("/programs", getProgramsHandler)
 	http.HandleFunc("/generate_random", generateProgramHandler)
+	http.HandleFunc("/generate_mixed_random", generateMixedProgramHandler)
 
 	fmt.Println("Bridge server listening on :9999")
 	if err := http.ListenAndServe(":9999", nil); err != nil {

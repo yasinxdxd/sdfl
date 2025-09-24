@@ -225,13 +225,19 @@ void createGenerateWindow() {
         ImVec2 size = ImGui::GetWindowSize();
         ImGui::BeginChild("##Radiobuttons", ImVec2(size.x, size.y * 0.2));
         if (ImGui::RadioButton("Random Generate", selected == 0)) selected = 0;
-        if (ImGui::RadioButton("Text Base Generate", selected == 1)) selected = 1;
+        if (ImGui::RadioButton("Random Mixed Generate", selected == 1)) selected = 1;
+        if (ImGui::RadioButton("Text Base Generate", selected == 2)) selected = 2;
         ImGui::EndChild();
         ImGui::NewLine();
         if (selected == 0) {
             if (ImGui::Button("Generate Random Model", {256, 28})) {
                 generate_random_program();
                 launch_process_blocking({"./sdfl/sdflc", "--seq", "generated_random_sequence.seq"});
+            }
+        } else if (selected == 1) {
+            if (ImGui::Button("Generate Mixed Random Model", {256, 28})) {
+                generate_mixed_random_program();
+                launch_process_blocking({"./sdfl/sdflc", "--seq", "generated_mixed_random_sequence.seq"});
             }
         } else {
             char promptBuff[256] = {0};
