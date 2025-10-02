@@ -97,6 +97,18 @@ void Texture2D::generate_texture()
     }
 }
 
+void Texture2D::update_texture(unsigned char* data) {
+    bind();
+    GLenum format = GL_RGB;
+    if (m_texture2d_nmbrof_clr_chnnels == 4) format = GL_RGBA;
+    else if (m_texture2d_nmbrof_clr_chnnels == 3) format = GL_RGB;
+    else if (m_texture2d_nmbrof_clr_chnnels == 1) format = GL_RED;
+
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_texture2d_width, m_texture2d_height,
+                    format, GL_UNSIGNED_BYTE, data);
+    unbind();
+}
+
 void Texture2D::delete_texture()
 {
     glDeleteTextures(1, &m_gl_texture2d_texture_id);

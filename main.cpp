@@ -18,6 +18,8 @@
 #include <sdf_app.hpp>
 #include <sdf_client.hpp>
 
+#include <head_tracker.hpp>
+
 #include <ui_widgets.hpp>
 
 Texture2D* screenTexture;
@@ -390,6 +392,7 @@ void renderMainUI(const yt2d::Window& window) {
         createRendererWindow();
         createExportWindow();
         createInfoWindow();
+        ht::draw_cam_frame();
         break;
     case PageState::GENERATE_STATE:
         createRendererWindow();
@@ -421,6 +424,11 @@ int main(void) {
 
     sdfl_programs = get_programs_from_cache();
     program_preview_textures = create_preview_textures(sdfl_programs);
+
+    // head_tracker
+    if (!ht::init()) {
+        std::cout << "ERROR: Head tracker cannot be initialized"<< std::endl;
+    }
 
     
     Quad quad;
@@ -458,6 +466,11 @@ int main(void) {
                 // send uniforms
                 shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
                 shader->set<float, 1>("elapsed_time", elapsed_time);
+                shader->set<bool, 1>("ht_tracking_enabled", ht::is_head_tracking_enabled());
+                cv::Point3f hc = ht::get_head_center() * 8.0f;
+                printf("head_center: %f, %f, %f\n", hc.x, hc.y, hc.z);
+                float hcz = (2.5f * hc.z);
+                shader->set<float, 3>("ht_head_center", hc.x, hc.y, hcz);
             });
         }
         screenRenderTexture.unbind();
@@ -487,6 +500,8 @@ int main(void) {
     delete screenTexture;
     glcompiler::destroy();
     DestroyImgui();
+
+    ht::destroy();
 
     return 0;
 }

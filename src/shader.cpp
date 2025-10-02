@@ -163,6 +163,16 @@ Shader::operator unsigned int()
 // FIXME: FIX the multi dimensional set methods with a better structure!!!
 
 template <>
+void Shader::set<bool>(std::string name, bool value) const
+{
+    glUseProgram(m_gl_shader_program_id);
+
+    glUniform1i(
+        glGetUniformLocation(m_gl_shader_program_id, name.c_str()),
+        value);
+}
+
+template <>
 void Shader::set<int>(std::string name, int value) const
 {
     glUseProgram(m_gl_shader_program_id);

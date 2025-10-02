@@ -410,12 +410,19 @@ func (arrExpr *ArrExpr) generate(args ...any) {
 
 func generateGlslCamera(cameraFunCall *FunCall) {
 	generateFragmentCode("    // generated camera position\n")
+	// generateFragmentCode("    vec3 ray_origin = vec3(0.);\n")
 	generateFragmentCode("    vec3 ray_origin = ")
 	cameraFunCall.FunNamedArgs["position"].Expr.Tuple.generate(true)
-	generateFragmentCode(";")
-	generateFragmentCode(`
-    vec3 ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel
-`)
+	generateFragmentCode(";\n")
+
+	generateFragmentCode("    vec3 ray_dir = vec3(0.);\n")
+	generateFragmentCode("    if (!ht_tracking_enabled) {")
+	generateFragmentCode("        ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel\n")
+	generateFragmentCode("    } else {")
+	generateFragmentCode("        ray_origin = ray_origin + ht_head_center;\n")
+	generateFragmentCode("        ray_dir = normalize(vec3(uv, -1));\n")
+	generateFragmentCode("    //test\n")
+	generateFragmentCode("    }\n")
 }
 
 func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
@@ -482,6 +489,8 @@ out vec4 frag_color;
 // uniforms
 uniform ivec2 window_size;
 uniform float elapsed_time;
+uniform bool ht_tracking_enabled;
+uniform vec3 ht_head_center;
 
 #define SDFL_MAX_STEPS 100
 #define SDFL_MAX_DISTANCE 100.
