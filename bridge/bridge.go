@@ -245,9 +245,10 @@ func generateProgramHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type GenerateMixedProgramRequest struct {
-	StateSizes  int      `json:"state_sizes"`
-	MaxLength   int      `json:"max_length"`
-	StartTokens []string `json:"start_tokens",omitempty`
+	StateSizes   []int     `json:"state_sizes"`
+	StateWeights []float32 `json:"state_weights"`
+	MaxLength    int       `json:"max_length"`
+	StartTokens  []string  `json:"start_tokens",omitempty`
 }
 
 func generateMixedProgramHandler(w http.ResponseWriter, r *http.Request) {
@@ -255,8 +256,11 @@ func generateMixedProgramHandler(w http.ResponseWriter, r *http.Request) {
 
 	// send actual server
 	reqBody := GenerateMixedProgramRequest{
-		// StateSize: 8,
-		MaxLength: 500,
+		StateSizes:   []int{2, 6, 8, 12, 16},
+		StateWeights: []float32{0.01, 0.01, 0.8, 0.1, 0.1},
+		// StateSizes:   []int{8},
+		// StateWeights: []float32{1.0},
+		MaxLength: 1000,
 	}
 
 	jsonBytes, _ := json.Marshal(reqBody)

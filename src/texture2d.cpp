@@ -40,6 +40,7 @@ bool Texture2D::load_texture(const char* path)
 
 bool Texture2D::load_texture_from_memory(const unsigned char* buffer, unsigned int len)
 {
+    data_loaded_by_load_texture = true;
     m_texture2d_data = stbi_load_from_memory(buffer, len, &m_texture2d_width, &m_texture2d_height, &m_texture2d_nmbrof_clr_chnnels, 0);
     
     if(m_texture2d_data == nullptr)
