@@ -416,13 +416,24 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 	generateFragmentCode(";\n")
 
 	generateFragmentCode("    vec3 ray_dir = vec3(0.);\n")
-	generateFragmentCode("    if (!ht_tracking_enabled) {")
+	generateFragmentCode("    if (!ht_tracking_enabled) {\n")
 	generateFragmentCode("        ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel\n")
-	generateFragmentCode("    } else {")
+	generateFragmentCode("    } else {\n")
 	generateFragmentCode("        ray_origin = ray_origin + ht_head_center;\n")
-	generateFragmentCode("        ray_dir = normalize(vec3(uv, -1));\n")
-	generateFragmentCode("    //test\n")
-	generateFragmentCode("    }\n")
+	generateFragmentCode(`
+		// Calculate view target (looking at scene center)
+		vec3 target = vec3(0, 2, 0);  // adjust to your scene center
+		vec3 forward = normalize(target - ray_origin);
+
+		// Build camera basis
+		vec3 right = normalize(cross(forward, vec3(0, 1, 0)));
+		vec3 up = cross(right, forward);
+
+		// Calculate ray direction using proper camera matrix
+		float fov = 1.0;  // adjust for field of view (lower = more zoom)
+		ray_dir = normalize(forward + right * uv.x * fov + up * uv.y * fov);
+	`)
+	generateFragmentCode("}\n")
 }
 
 func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
