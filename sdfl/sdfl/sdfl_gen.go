@@ -46,6 +46,7 @@ var functionSymbols = map[string]FunDef{
 	"inversesqrt":        {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "inversesqrt", FunDefArgNames: []string{"val"}},
 }
 
+var resetCode = "// reset\n"
 var generatedCodeFragmentShader = ""
 var generatedCodeComputeShader = ""
 
@@ -162,6 +163,22 @@ func (stmt *Stmt) generate(args ...any) {
 }
 
 func (funDef *FunDef) generate(args ...any) {
+	// local distance buffers
+	generateCodeBoth(`
+SceneResult _scene_result_%s = SceneResult(SDFL_MAX_DISTANCE, 0);
+
+SceneResult sdfl_PushScene_%s(SceneResult sr) {
+    if (sr.distance < _scene_result_%s.distance) {
+        _scene_result_%s.distance = sr.distance;
+        _scene_result_%s.materialId = sr.materialId;
+    }
+    return _scene_result_%s;
+}	
+`, funDef.Id, funDef.Id, funDef.Id, funDef.Id, funDef.Id, funDef.Id)
+
+	// code to reset the local buffer
+	resetCode += fmt.Sprintf("    _scene_result_%s = SceneResult(SDFL_MAX_DISTANCE, 0);\n", funDef.Id)
+
 	// TODO: get arguments
 	generateCodeBoth("\nfloat %s(%s) {\n", funDef.Id, "vec3 p")
 	generateCodeBoth("    SceneResult d = SceneResult(SDFL_MAX_DISTANCE, 0);\n")
@@ -181,7 +198,7 @@ func (funDef *FunDef) generate(args ...any) {
 	}
 
 	for _, expr := range childrenArr.Exprs {
-		expr.generate()
+		expr.generate("p", false, funDef.Id)
 	}
 
 	generateCodeBoth("    return d.distance;\n")
@@ -195,7 +212,7 @@ func (expr *Expr) generate(args ...any) {
 
 	switch expr.Type {
 	case AST_FUN_CALL:
-		expr.FunCall.generate()
+		expr.FunCall.generate(args...)
 	case AST_TUPLE:
 		expr.Tuple.generate()
 	case AST_ARR_EXPR:
@@ -227,10 +244,14 @@ func freshVar(base string) string {
 func (funCall *FunCall) generate(args ...any) string {
 	rayPosition := "p"
 	parentIsOp := false
+	localFunDefId := ""
 	if len(args) > 0 {
 		rayPosition = args[0].(string)
 		if len(args) > 1 {
 			parentIsOp = args[1].(bool)
+			if len(args) > 2 {
+				localFunDefId = args[2].(string)
+			}
 		}
 	}
 
@@ -315,7 +336,11 @@ func (funCall *FunCall) generate(args ...any) string {
 
 		// Only push to scene if this isn't part of a larger operation
 		if !parentIsOp {
-			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+			if localFunDefId != "" {
+				generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene_%s(%s);\n", localFunDefId, sd))
+			} else {
+				generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+			}
 		}
 		return sd
 
@@ -333,7 +358,11 @@ func (funCall *FunCall) generate(args ...any) string {
 		generateCodeBoth("), 0);\n")
 
 		if !parentIsOp {
-			generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+			if localFunDefId != "" {
+				generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene_%s(%s);\n", localFunDefId, sd))
+			} else {
+				generateCodeBoth(fmt.Sprintf("    d = sdfl_PushScene(%s);\n", sd))
+			}
 		}
 		return sd
 
@@ -404,7 +433,7 @@ func (binopTerm *BinopTerm) generate(args ...any) {
 
 func (arrExpr *ArrExpr) generate(args ...any) {
 	for _, expr := range arrExpr.Exprs {
-		expr.generate()
+		expr.generate(args...)
 	}
 }
 
@@ -430,7 +459,7 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 		vec3 up = cross(right, forward);
 
 		// Calculate ray direction using proper camera matrix
-		float fov = 1.0;  // adjust for field of view (lower = more zoom)
+		float fov = 0.5;  // adjust for field of view (lower = more zoom)
 		ray_dir = normalize(forward + right * uv.x * fov + up * uv.y * fov);
 	`)
 	generateFragmentCode("}\n")
@@ -832,7 +861,8 @@ SceneResult sdfl_GetDistScene(vec3 p) {
 }
 
 func generateGlslDistSceneEnd() {
-	code := `
+	code := resetCode
+	code += `
     return d;
 }
 `
