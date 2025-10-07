@@ -90,6 +90,11 @@ func compile(filePath string) {
 	parser := sdfl.NewParser(tokens)
 	program := parser.Parse()
 
+	if parser.IsThereError() {
+		fmt.Printf("ERROR: Syntax error!\n")
+		return
+	}
+
 	sdfl.PrintAST(program)
 	// convert to sequence
 	sequence := sdfl.AST2Seq(program)
@@ -101,7 +106,6 @@ func compile(filePath string) {
 
 	sdfl.Reset()
 	sdfl.Generate(&program)
-
 	// fmt.Println(sdfl.GetCode())
 	f, err := os.Create("out_frag.glsl")
 	check(err)
