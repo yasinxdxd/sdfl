@@ -114,6 +114,7 @@ int camHeight;
     }
 
 cv::Point3f get_head_center() {
+    static float previous_z = 0.f;
     if (head_rect.width == 0 || head_rect.height == 0)
         return smoothed_head;  // return last known position
     
@@ -131,11 +132,16 @@ cv::Point3f get_head_center() {
     
     cv::Point3f npos(x, y, z);
     
-    // Use different smoothing for Z (depth is noisier)
-    float z_smoothing = 0.85f;  // much heavier smoothing for depth
+    // different smoothing for Z
+    float z_smoothing = 0.88f;  // much heavier smoothing for depth
     smoothed_head.x = smoothed_head.x * smoothing + npos.x * (1.0f - smoothing);
     smoothed_head.y = smoothed_head.y * smoothing + npos.y * (1.0f - smoothing);
     smoothed_head.z = smoothed_head.z * z_smoothing + npos.z * (1.0f - z_smoothing);
+
+    if (fabs(smoothed_head.z - previous_z) < 5e-4) {
+        smoothed_head.z = previous_z;
+    }
+    previous_z = smoothed_head.z;
     
     return smoothed_head;
 }
