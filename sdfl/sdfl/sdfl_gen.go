@@ -3,6 +3,7 @@ package sdfl
 import (
 	"fmt"
 	"os"
+	"reflect"
 )
 
 var functionSymbols = map[string]FunDef{
@@ -23,6 +24,7 @@ var functionSymbols = map[string]FunDef{
 	"intersection":       {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_OP, Id: "intersection", FunDefArgNames: []string{"child1", "child2"}},
 	"noise":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SDFL, Id: "noise", FunDefArgNames: []string{}},
 	"hash":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SDFL, Id: "hash", FunDefArgNames: []string{}},
+	"time":               {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SDFL, Id: "time", FunDefArgNames: []string{}},
 	"radians":            {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "radians", FunDefArgNames: []string{"val"}},
 	"degrees":            {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "degrees", FunDefArgNames: []string{"val"}},
 	"sin":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_GLSL, Id: "sin", FunDefArgNames: []string{"val"}},
@@ -220,9 +222,9 @@ func (expr *Expr) generate(args ...any) {
 	case AST_NUMBER:
 		expr.Number.generate()
 	case AST_BINOP_TERM:
-		expr.BinopTerm.generate()
+		expr.BinopTerm.generate(args...)
 	case AST_BINOP_FACTOR:
-		expr.BinopFactor.generate()
+		expr.BinopFactor.generate(args...)
 	default:
 		fmt.Printf("gen error: unknown expr type: %v\n", expr.Type)
 	}
@@ -242,11 +244,15 @@ func freshVar(base string) string {
 }
 
 func (funCall *FunCall) generate(args ...any) string {
+	println("HERE:")
+	println(len(args))
 	rayPosition := "p"
 	parentIsOp := false
 	localFunDefId := ""
 	if len(args) > 0 {
-		rayPosition = args[0].(string)
+		if reflect.TypeOf(args[0]).String() == "string" {
+			rayPosition = args[0].(string)
+		}
 		if len(args) > 1 {
 			parentIsOp = args[1].(bool)
 			if len(args) > 2 {
@@ -299,15 +305,15 @@ func (funCall *FunCall) generate(args ...any) string {
 
 		// Generate the rotation transformation code
 		generateCodeBoth(fmt.Sprintf("    vec3 %s = %s - ", qVar, rayPosition))
-		posExpr.Expr.generate()
+		posExpr.Expr.generate(args...)
 		generateCodeBoth(";\n")
 
 		generateCodeBoth(fmt.Sprintf("    %s = sdfl_RotationMatrix(radians(", qVar))
-		rotExpr.Expr.generate()
+		rotExpr.Expr.generate(args...)
 		generateCodeBoth(fmt.Sprintf(")) * %s;\n", qVar))
 
 		generateCodeBoth(fmt.Sprintf("    %s += ", qVar))
-		posExpr.Expr.generate()
+		posExpr.Expr.generate(args...)
 		generateCodeBoth(";\n")
 
 		// CRITICAL: Pass the new coordinate system (qVar) to the child
@@ -422,6 +428,8 @@ func (number *Number) generate(args ...any) {
 func (binopFactor *BinopFactor) generate(args ...any) {
 	binopFactor.Left.generate(args)
 	generateCodeBoth(binopFactor.Operator)
+	println("HERE1:")
+	println(len(args))
 	binopFactor.Right.generate(args)
 }
 
@@ -702,6 +710,10 @@ SceneResult sdfl_builtin_smoothIntersection(SceneResult d1, SceneResult d2, floa
 
 float sdfl_builtin_hash(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float sdfl_builtin_time(vec2 p){
+    return elapsed_time;
 }
 
 float sdfl_builtin_noise_simple(vec2 point) {
