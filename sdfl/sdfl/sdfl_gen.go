@@ -712,10 +712,6 @@ float sdfl_builtin_hash(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-float sdfl_builtin_time(vec2 p){
-    return elapsed_time;
-}
-
 float sdfl_builtin_noise_simple(vec2 point) {
     vec2 p = fract(point);
     p = smoothstep(0., 1., p);
@@ -745,7 +741,17 @@ float sdfl_builtin_noise(vec2 point) {
 }
 `
 	generateFragmentCode(code)
+	generateFragmentCode(`
+float sdfl_builtin_time(vec2 p){
+    return elapsed_time;
+}
+	`)
 	generateComputeCode(code)
+	generateComputeCode(`
+float sdfl_builtin_time(vec2 p){
+    return 1.0;
+}
+	`)
 }
 
 func generateGlslRaymarchEngine() {
