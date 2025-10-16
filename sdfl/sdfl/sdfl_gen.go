@@ -318,15 +318,15 @@ func (funCall *FunCall) generate(args ...any) string {
 
 		// CRITICAL: Pass the new coordinate system (qVar) to the child
 		// This ensures all nested shapes use the rotated coordinates
-		return childExpr.Expr.FunCall.generate(qVar, parentIsOp)
+		return childExpr.Expr.FunCall.generate(qVar, parentIsOp, localFunDefId)
 
 	case FUN_BUILTIN_OP:
 		exprs := orderedArgs()
 
 		// Both children should use the SAME rayPosition (which might be "p" or "q16" etc)
 		// and both should be marked as parentIsOp=true so they don't call sdfl_PushScene
-		child1Var := exprs[0].FunCall.generate(rayPosition, true)
-		child2Var := exprs[1].FunCall.generate(rayPosition, true)
+		child1Var := exprs[0].FunCall.generate(rayPosition, true, localFunDefId)
+		child2Var := exprs[1].FunCall.generate(rayPosition, true, localFunDefId)
 
 		sd := freshVar("sd")
 		// Use child1, child2 order to match the expected output
