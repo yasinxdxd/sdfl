@@ -447,19 +447,26 @@ func (arrExpr *ArrExpr) generate(args ...any) {
 
 func generateGlslCamera(cameraFunCall *FunCall) {
 	generateFragmentCode("    // generated camera position\n")
-	// generateFragmentCode("    vec3 ray_origin = vec3(0.);\n")
-	generateFragmentCode("    vec3 ray_origin = ")
+	generateFragmentCode("    vec3 cam_pos = ")
 	cameraFunCall.FunNamedArgs["position"].Expr.Tuple.generate(true)
 	generateFragmentCode(";\n")
+}
 
-	generateFragmentCode("    vec3 ray_dir = vec3(0.);\n")
-	generateFragmentCode("    if (!ht_tracking_enabled) {\n")
-	generateFragmentCode("        ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel\n")
-	generateFragmentCode("    } else {\n")
-	generateFragmentCode("        ray_origin = ray_origin + ht_head_center;\n")
+func generateCalculateMainScene(bg string) {
 	generateFragmentCode(`
+vec3 calc_color(vec3 cam_pos) {
+    vec2 uv = o_vertex_uv * 2. - 1.;
+    uv.y *= float(window_size.y) / float(window_size.x);
+    // generated camera position
+    vec3 ray_origin = cam_pos;
+    vec3 ray_dir = vec3(0.);
+    if (!ht_tracking_enabled) {
+        ray_dir = normalize(vec3(uv, -1)); // ray direction for the each pixel
+    } else {
+        ray_origin = ray_origin + ht_head_center;
+
 		// Calculate view target (looking at scene center)
-		vec3 target = vec3(0, 2, 0);  // adjust to your scene center
+		vec3 target = vec3(0, 1, 0);  // adjust to your scene center
 		vec3 forward = normalize(target - ray_origin);
 
 		// Build camera basis
@@ -469,20 +476,8 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 		// Calculate ray direction using proper camera matrix
 		float fov = 0.5;  // adjust for field of view (lower = more zoom)
 		ray_dir = normalize(forward + right * uv.x * fov + up * uv.y * fov);
-	`)
-	generateFragmentCode("}\n")
-}
+	}
 
-func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
-	generateFragmentCode(`
-void main() {
-    vec2 uv = o_vertex_uv * 2. - 1.;
-    uv.y *= float(window_size.y) / float(window_size.x);
-`)
-
-	generateGlslCamera(cameraFunCall)
-
-	generateFragmentCode(`
     SceneResult result = sdfl_RayMarch(ray_origin, ray_dir);
     
     vec3 color = vec3(0.0);
@@ -497,10 +492,31 @@ void main() {
         // Background/sky
         color = mix(vec3(0.5, 0.7, 1.0), %s, uv.y * 0.5 + 0.5);
     }
-    
-    frag_color = vec4(color, 1.0);
+
+    return color;
 }
 `, bg)
+}
+
+func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
+	generateCalculateMainScene(bg)
+	generateFragmentCode("void main() {\n")
+	generateGlslCamera(cameraFunCall)
+
+	generateFragmentCode(`
+	// this offset should be setable
+	vec3 offset = vec3(0.05, 0, 0);
+    vec3 color_left = calc_color(cam_pos - offset);
+    color_left.gb = vec2(0);
+
+    vec3 color_right = calc_color(cam_pos + offset);
+    color_right.r = 0;
+
+    vec3 color = (color_left + color_right);
+
+    frag_color = vec4(color, 1.0);
+}
+`)
 }
 
 func generateGlslComputeMain() {
