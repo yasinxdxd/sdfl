@@ -35,7 +35,7 @@ std::vector<ProgramMetaData> sdfl_programs;
 std::vector<Texture2D*> program_preview_textures;
 
 
-int resolution = 256;
+constexpr int resolution = 64;
 int workGroupsPerAxis = (resolution + 7) / 8; // ceil
 
 std::vector<Texture2D*> create_preview_textures(std::vector<ProgramMetaData> programs) {
@@ -468,8 +468,8 @@ int main(void) {
                 shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
                 shader->set<float, 1>("elapsed_time", elapsed_time);
                 shader->set<bool, 1>("ht_tracking_enabled", ht::is_head_tracking_enabled());
-                cv::Point3f hc = ht::get_head_center() * 8.0f; // TODO: effect can be
-                printf("head_center: %f, %f, %f\n", hc.x, hc.y, hc.z);
+                cv::Point3f hc = ht::get_head_center() * 32.0f; // TODO: effect can be
+                // printf("head_center: %f, %f, %f\n", hc.x, hc.y, hc.z);
                 float hcz = (2.5f * hc.z);
                 shader->set<float, 3>("ht_head_center", hc.x, hc.y, hcz);
             });
