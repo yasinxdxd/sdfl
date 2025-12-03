@@ -551,6 +551,7 @@ out vec4 frag_color;
 
 
 // uniforms
+uniform sampler2D editor_texture;
 uniform ivec2 window_size;
 uniform float elapsed_time;
 uniform bool ht_tracking_enabled;
@@ -578,6 +579,9 @@ struct SceneResult {
 
 func generateGlslFragmentGetMaterial() {
 	generateFragmentCode(`
+
+vec2 editor_uv = vec2(0.);
+
 Material sdfl_GetMaterial(int id) {
     Material mat;
     
@@ -598,6 +602,12 @@ Material sdfl_GetMaterial(int id) {
         mat.roughness = 0.1;
         mat.metallic = 0.0;
         mat.emission = vec3(0.1, 0.0, 0.0); // slight red glow
+    }
+	else if (id == 3) { // TEXTURE
+        mat.albedo = texture(editor_texture, editor_uv).xyz;
+        mat.roughness = 1;
+        mat.metallic = 0.5;
+        mat.emission = vec3(0.1, 0.1, 0.1); // slight red glow
     }
     else { // Fallback
         mat.albedo = vec3(0.5, 0.5, 0.5);
@@ -639,6 +649,25 @@ struct SceneResult {
 
 func generateGlslBuiltinSDFFunctions() {
 	code := `
+float editor_sdfl_builtin_plane(vec3 p, vec3 pos, vec3 n, vec2 size) {    
+    vec3 rel = p - pos;
+    float d = dot(rel, n);
+    vec3 t1 = normalize(abs(n.x) > abs(n.z)
+                        ? vec3(-n.y, n.x, 0.0)
+                        : vec3(0.0, -n.z, n.y));
+    vec3 t2 = cross(n, t1);
+    // coordinates in plane-space
+    float x = dot(rel, t1);
+    float y = dot(rel, t2);
+    
+    // UPDATE UV based on editor plane's local coordinates
+    editor_uv = vec2(y, x) / (size * 2.0) + 0.5; // normalize to [0,1] - size is half-dimensions
+    
+    vec2 q = abs(vec2(x, y)) - size;
+    float edgeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+    return sqrt(d * d + max(edgeDist, 0.0) * max(edgeDist, 0.0));
+}
+
 float sdfl_builtin_plane(vec3 p, float height) {    
     return p.y - height;
 }
@@ -892,6 +921,17 @@ SceneResult sdfl_GetDistScene(vec3 p) {
 
 `
 	generateCodeBoth(code)
+	generateFragmentCode(`
+	SceneResult editor = SceneResult(
+        editor_sdfl_builtin_plane(
+            p,
+            vec3(-3, 5, 2),
+            vec3(0, 0, 1),
+            vec2(3)
+        ), 3
+    );
+    d = sdfl_PushScene(editor);
+`)
 }
 
 func generateGlslDistSceneEnd() {

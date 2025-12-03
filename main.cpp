@@ -22,6 +22,7 @@
 
 #include <ui_widgets.hpp>
 
+Texture2D* editorTexture;
 Texture2D* screenTexture;
 RenderTexture2D screenRenderTexture;
 ImVec2 screenSize;
@@ -411,6 +412,9 @@ int main(void) {
     screenTexture->generate_texture();
     screenRenderTexture.set_texture(screenTexture);
 
+    editorTexture = new Texture2D("/home/yasinxdxd/Downloads/bg.jpg");
+    editorTexture->generate_texture();
+
     /* shader */
     glcompiler::init();
     Shader* shader = new Shader("out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
@@ -463,8 +467,10 @@ int main(void) {
         window.setViewport(0, 0, screenRenderTexture.get_texture()->get_width(), screenRenderTexture.get_texture()->get_height());
         if (page_state == PageState::RENDER_STATE || page_state == PageState::GENERATE_STATE) {    
             // render
+            editorTexture->bind();
             render(quad, 6, shader, [&](Shader* shader) {
                 // send uniforms
+                shader->set<unsigned int, 1>("editor_texture", (unsigned int)*editorTexture);
                 shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
                 shader->set<float, 1>("elapsed_time", elapsed_time);
                 shader->set<bool, 1>("ht_tracking_enabled", ht::is_head_tracking_enabled());
@@ -473,6 +479,7 @@ int main(void) {
                 float hcz = (2.5f * hc.z);
                 shader->set<float, 3>("ht_head_center", hc.x, hc.y, hcz);
             });
+            editorTexture->unbind();
         }
         screenRenderTexture.unbind();
 
@@ -498,6 +505,7 @@ int main(void) {
     delete_preview_textures();
 
     delete shader;
+    delete editorTexture;
     delete screenTexture;
     glcompiler::destroy();
     DestroyImgui();
