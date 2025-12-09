@@ -331,7 +331,6 @@ void MeshStatic::load_mesh_gltf(const char *path)
     std::cout << std::endl;
     std::cout << "gltf loader::model_mesh_size:" << model.meshes.size() << std::endl;
 
-    model.buffers[0];//
 
     for (auto& mesh : model.meshes)
     {
