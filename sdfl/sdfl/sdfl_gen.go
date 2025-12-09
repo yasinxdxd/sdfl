@@ -606,8 +606,8 @@ Material sdfl_GetMaterial(int id) {
 	else if (id == 3) { // TEXTURE
         mat.albedo = texture(editor_texture, editor_uv).xyz;
         mat.roughness = 1;
-        mat.metallic = 0.5;
-        mat.emission = vec3(0.1, 0.1, 0.1); // slight red glow
+        mat.metallic = 10;
+        mat.emission = vec3(0.2); // slight red glow
     }
     else { // Fallback
         mat.albedo = vec3(0.5, 0.5, 0.5);
@@ -662,7 +662,8 @@ float editor_sdfl_builtin_plane(vec3 p, vec3 pos, vec3 n, vec2 size) {
     
     // UPDATE UV based on editor plane's local coordinates
     editor_uv = vec2(y, x) / (size * 2.0) + 0.5; // normalize to [0,1] - size is half-dimensions
-    
+    editor_uv.y = -editor_uv.y;
+	
     vec2 q = abs(vec2(x, y)) - size;
     float edgeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
     return sqrt(d * d + max(edgeDist, 0.0) * max(edgeDist, 0.0));

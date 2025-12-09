@@ -21,8 +21,10 @@
 #include <head_tracker.hpp>
 
 #include <ui_widgets.hpp>
+#include <TextEditor.h>
 
 Texture2D* editorTexture;
+RenderTexture2D editorRenderTexture;
 Texture2D* screenTexture;
 RenderTexture2D screenRenderTexture;
 ImVec2 screenSize;
@@ -412,8 +414,13 @@ int main(void) {
     screenTexture->generate_texture();
     screenRenderTexture.set_texture(screenTexture);
 
-    editorTexture = new Texture2D("/home/yasinxdxd/Downloads/bg.jpg");
+    // editorTexture = new Texture2D("/home/yasinxdxd/Downloads/bg.jpg");
+    // editorTexture->generate_texture();
+    TextEditor text_editor;
+    
+    editorTexture = new Texture2D(640, 480, nullptr);
     editorTexture->generate_texture();
+    editorRenderTexture.set_texture(editorTexture);
 
     /* shader */
     glcompiler::init();
@@ -455,6 +462,24 @@ int main(void) {
             std::cout << "FILE CHANGED!!!!"<< std::endl;
         }
 
+        // draw the text editor to editorRenderTexture
+        ImGui::SetCurrentContext(editorContext);
+
+        editorRenderTexture.bind();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        window.clear();
+        window.setViewport(0, 0, editorRenderTexture.get_texture()->get_width(), editorRenderTexture.get_texture()->get_height());
+            ImGui::Begin("Test");
+                text_editor.Render("SDFL Editor", {640, 480});
+            ImGui::End();
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        editorRenderTexture.unbind();
+
+
+        ImGui::SetCurrentContext(mainContext);
 
         window.clear();
         ImGui_ImplOpenGL3_NewFrame();
@@ -483,6 +508,7 @@ int main(void) {
         }
         screenRenderTexture.unbind();
 
+        
         renderMainUI(window);
         
         ImGui::Render();

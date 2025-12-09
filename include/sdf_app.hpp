@@ -23,54 +23,98 @@
 
 ImFont* fontBig;
 ImFont* fontSml;
+unsigned char* fontData2 = nullptr;
+
+ImGuiContext* mainContext = nullptr;
+ImGuiContext* editorContext = nullptr;
 
 void InitImgui(yt2d::Window& window) {
-    // Setup Dear ImGui context
+    // Setup Dear ImGui MAIN context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    mainContext = ImGui::GetCurrentContext();
+    
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-
-    // ImFontConfig cfg;
-    // cfg.FontDataOwnedByAtlas = false;
-    // fontBig = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg);
-    // ImGui::GetIO().Fonts->Build();
-
-    // let imgui to free the font
+    // load font for main context
     unsigned char* fontData = (unsigned char*)malloc(JetBrainsMonoNL_Light_ttf_len);
     memcpy(fontData, JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len);
     ImFontConfig cfg;
-    cfg.FontDataOwnedByAtlas = true;  // imgui will free() safely
-    fontBig = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(fontData, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg);
+    cfg.FontDataOwnedByAtlas = true;
+    fontBig = io.Fonts->AddFontFromMemoryTTF(fontData, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg);
 
-
-    // fontSml = ImGui::GetIO().Fonts->AddFontFromFileTTF("JetBrainsMonoNL-Light.ttf", 18.0f);
-    // Setup Dear ImGui style
+    // setup style for main context
     ImguiStyle();
-    // ImGui::StyleColorsDark();
-    // ImGui::StyleColorsLight();
+    ImGuiStyle mainStyle = ImGui::GetStyle(); // save style
 
-    // Setup Platform/Renderer backends
+    // initialize backends for main context
     if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
-        std::cout << "ERROR: ImGui_ImplGlfw_InitForOpenGL" << std::endl;
+        std::cout << "ERROR: ImGui_ImplGlfw_InitForOpenGL (main)" << std::endl;
     }
     #ifdef __EMSCRIPTEN__
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
     #endif
     if (!ImGui_ImplOpenGL3_Init("#version 330 core")) {
-        std::cout << "ERROR: ImGui_ImplOpenGL3_Init" << std::endl;
+        std::cout << "ERROR: ImGui_ImplOpenGL3_Init (main)" << std::endl;
     }
 
-    // glfwSetScrollCallback(window, _priv::callbacks::scroll_callback);
+    // create EDITOR context with its own font atlas
+    editorContext = ImGui::CreateContext();
+    ImGui::SetCurrentContext(editorContext);
+    
+    ImGuiIO& editorIO = ImGui::GetIO();
+    editorIO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    editorIO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    editorIO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    
+    // load font for editor context
+    unsigned char* fontData2 = (unsigned char*)malloc(JetBrainsMonoNL_Light_ttf_len);
+    memcpy(fontData2, JetBrainsMonoNL_Light_ttf, JetBrainsMonoNL_Light_ttf_len);
+    ImFontConfig cfg2;
+    cfg2.FontDataOwnedByAtlas = true;
+    editorIO.Fonts->AddFontFromMemoryTTF(fontData2, JetBrainsMonoNL_Light_ttf_len, 18.0f, &cfg2);
+    
+    // apply same style to editor context
+    ImGui::GetStyle() = mainStyle;
+    
+    // initialize backends for editor context
+    ImGui_ImplGlfw_InitForOpenGL(window, false);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+    
+    // switch back to main context
+    ImGui::SetCurrentContext(mainContext);
 }
 
 void DestroyImgui() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    // shutdown editor context backends first
+    if (editorContext) {
+        ImGui::SetCurrentContext(editorContext);
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+    }
+    
+    // shutdown main context backends
+    if (mainContext) {
+        ImGui::SetCurrentContext(mainContext);
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+    }
+    
+    // destroy the contexts (order matters here too)
+    if (editorContext) {
+        ImGui::DestroyContext(editorContext);
+        editorContext = nullptr;
+    }
+    
+    if (mainContext) {
+        ImGui::DestroyContext(mainContext);
+        mainContext = nullptr;
+    }
+
+    free(fontData2);
 }
 
 bool launch_process_blocking(const std::vector<std::string>& args) {
