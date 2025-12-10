@@ -454,8 +454,7 @@ func generateGlslCamera(cameraFunCall *FunCall) {
 
 func generateCalculateMainScene(bg string) {
 	generateFragmentCode(`
-vec3 calc_color(vec3 cam_pos) {
-    vec2 uv = o_vertex_uv * 2. - 1.;
+vec3 calc_color(vec3 cam_pos, vec2 uv) {
     uv.y *= float(window_size.y) / float(window_size.x);
     // generated camera position
     vec3 ray_origin = cam_pos;
@@ -498,24 +497,131 @@ vec3 calc_color(vec3 cam_pos) {
 `, bg)
 }
 
-func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
-	generateCalculateMainScene(bg)
-	generateFragmentCode("void main() {\n")
+func generateGlslFragmentAnaglyphRender(cameraFunCall *FunCall) {
+	generateFragmentCode("vec4 ANAGLYPH_RENDER() {\n")
 	generateGlslCamera(cameraFunCall)
 
 	generateFragmentCode(`
+    vec2 d_uv = o_vertex_uv * 2. - 1.;
+
 	// this offset should be setable
 	vec3 offset = vec3(0.05, 0, 0);
-    vec3 color_left = calc_color(cam_pos - offset);
+    vec3 color_left = calc_color(cam_pos - offset, d_uv);
     color_left.gb = vec2(0);
 
-    vec3 color_right = calc_color(cam_pos + offset);
+    vec3 color_right = calc_color(cam_pos + offset, d_uv);
     color_right.r = 0;
 
     vec3 color = (color_left + color_right);
 
-    frag_color = vec4(color, 1.0);
+    return vec4(color, 1.0);
 }
+`)
+}
+
+func generateLensValues() {
+	generateFragmentCode(
+		`
+float u_ipd = 0.064;
+float u_lens_separation = 0.064;
+float u_screen_width = 0.2; // in meters
+// float u_distortion_k1 = 0.22;
+// float u_distortion_k2 = 0.24;
+
+// For Google Cardboard-style viewers:
+float u_distortion_k1 = 0.441;
+float u_distortion_k2 = 0.156;
+
+`)
+}
+
+func generateDistortionFunctions() {
+	generateFragmentCode(
+		`
+// Barrel distortion for VR lenses
+vec2 barrel_distortion(vec2 coord, float k1, float k2) {
+    // Offset from lens center (each lens is centered in its half)
+    vec2 cc = coord - 0.5;
+    float r2 = dot(cc, cc);
+    float distortion = 1.0 + k1 * r2 + k2 * r2 * r2;
+    return 0.5 + cc * distortion;
+}
+
+// Chromatic aberration for more realistic lens simulation
+vec2 chromatic_distortion(vec2 coord, float k1, float k2, float scale) {
+    vec2 cc = coord - 0.5;
+    float r2 = dot(cc, cc);
+    float distortion = 1.0 + (k1 + scale) * r2 + (k2 + scale * 0.5) * r2 * r2;
+    return 0.5 + cc * distortion;
+}
+
+`)
+}
+
+func generateGlslFragmentVRRender(cameraFunCall *FunCall) {
+	generateFragmentCode(`
+
+vec4 VR_RENDER() {
+    // Determine which eye we're rendering (left = 0.0-0.5, right = 0.5-1.0)
+    bool is_left_eye = o_vertex_uv.x < 0.5;
+    
+    // Normalize UV to single eye viewport [0, 1]
+    vec2 eye_uv = vec2(
+        is_left_eye ? o_vertex_uv.x * 2.0 : (o_vertex_uv.x - 0.5) * 2.0,
+        o_vertex_uv.y
+    );
+    
+    // Apply barrel distortion
+    float k1 = u_distortion_k1;
+    float k2 = u_distortion_k2;
+    vec2 distorted_uv = barrel_distortion(eye_uv, k1, k2);
+    
+    // Check if we're outside the valid distorted region
+    if (distorted_uv.x < 0.0 || distorted_uv.x > 1.0 || 
+        distorted_uv.y < 0.0 || distorted_uv.y > 1.0) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+    
+    // Convert distorted_uv from [0,1] to [-1,1] for calc_color
+    vec2 screen_uv = distorted_uv * 2.0 - 1.0;	
+`)
+	generateGlslCamera(cameraFunCall)
+
+	generateFragmentCode(`
+    // Calculate eye offset based on IPD
+    float eye_offset = u_ipd * 0.5;
+    
+    vec3 color;
+    
+    if (is_left_eye) {
+        // LEFT EYE - offset camera to the left
+        vec3 left_cam = cam_pos - vec3(eye_offset, 0, 0);
+        color = calc_color(left_cam, screen_uv);
+    } else {
+        // RIGHT EYE - offset camera to the right  
+        vec3 right_cam = cam_pos + vec3(eye_offset, 0, 0);
+        color = calc_color(right_cam, screen_uv);
+    }
+    
+    return vec4(color, 1.0);
+}
+`)
+}
+
+func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
+	generateCalculateMainScene(bg)
+
+	generateGlslFragmentAnaglyphRender(cameraFunCall)
+	generateLensValues()
+	generateDistortionFunctions()
+	generateGlslFragmentVRRender(cameraFunCall)
+
+	generateFragmentCode(`
+
+void main() {
+	frag_color = ANAGLYPH_RENDER();
+}
+
 `)
 }
 
