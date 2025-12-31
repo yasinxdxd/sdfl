@@ -28,6 +28,7 @@ RenderTexture2D editorRenderTexture;
 Texture2D* screenTexture;
 RenderTexture2D screenRenderTexture;
 ImVec2 screenSize;
+bool fullscreen = false;
 #define DESCRIPTION_BUFF_SIZE 1024
 #define NAME_BUFF_SIZE 256
 char description_buff[DESCRIPTION_BUFF_SIZE] = {0};
@@ -231,16 +232,20 @@ void createExportWindow() {
     ImGui::End();
 }
 
-void createModeWindow() {
+void createModeWindow(yt2d::Window& window) {
     static bool anaglyph_selected = false;
     ImGui::Begin("Render Mode");
     {
         if (ImGui::RadioButton("Normal Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::NORMAL)) anaglyph_selected = false;
-        if (ImGui::RadioButton("VR Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::VR)) anaglyph_selected = false;
+        if (ImGui::RadioButton("VR Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::VR)) {
+            anaglyph_selected = false;
+            window.setFullScreen(true);
+            fullscreen = true;
+        }
         if (ImGui::RadioButton("Anaglyph Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::RED_CYAN_ANAGLYPH)) anaglyph_selected = true;
 
         if (anaglyph_selected) {
-            ImGui::DragFloat2("offset", anaglyph_offset, 0.01, -20, 20);
+            ImGui::DragFloat2("offset", anaglyph_offset, 0.001, -10, 10);
         }
     }
     ImGui::End();
@@ -384,7 +389,7 @@ void createProgramsWindow(const yt2d::Window& window) {
     ImGui::End();
 }
 
-void renderMainUI(const yt2d::Window& window) {    
+void renderMainUI(yt2d::Window& window) {    
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -416,14 +421,17 @@ void renderMainUI(const yt2d::Window& window) {
         break;
     case PageState::RENDER_STATE:
         createRendererWindow();
-        createExportWindow();
-        createModeWindow();
-        createInfoWindow();
-        ht::draw_cam_frame();
+        if (!fullscreen) {
+            createExportWindow();
+            createModeWindow(window);
+            createInfoWindow();
+            ht::draw_cam_frame();
+        }
         break;
     case PageState::GENERATE_STATE:
         createRendererWindow();
         createGenerateWindow();
+        createModeWindow(window);
         ht::draw_cam_frame();
     default:
         break;
@@ -438,6 +446,14 @@ static bool save_string_to_file(const std::string& path, const std::string& cont
     return file.good();
 }
 
+std::string code_buffer_str;
+void InitEditor(TextEditor& editor) {
+    editor.SetLanguageDefinition(TextEditor::LanguageDefinition::C());
+    editor.SetText(code_buffer_str);
+    editor.SetHandleKeyboardInputs(true);
+    editor.SetPalette(editor.GetLightPalette());
+}
+
 int main(void) {
     yt2d::Window window("SDF Renderer", 1280, 720);
     InitImgui(window);
@@ -447,6 +463,7 @@ int main(void) {
     screenRenderTexture.set_texture(screenTexture);
 
     TextEditor text_editor;
+    InitEditor(text_editor);
     editorTexture = new Texture2D(640, 480, nullptr);
     editorTexture->generate_texture();
     editorRenderTexture.set_texture(editorTexture);
@@ -480,10 +497,6 @@ int main(void) {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         window.pollEvent();
 
-        if (Input::isKeyPressed(KeyCode::KEY_ESCAPE)) {
-            break;
-        }
-
         if (fw.hasChanged()) {
             delete shader;
             shader = new Shader("out_frag.glsl", Shader::ShaderCodeType::FRAGMENT_SHADER);
@@ -499,16 +512,28 @@ int main(void) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         window.clear();
-        window.setViewport(0, 0, editorRenderTexture.get_texture()->get_width(), editorRenderTexture.get_texture()->get_height());
-            ImGui::Begin("Test");
-                text_editor.Render("SDFL Editor", {640, 480});
-            ImGui::End();
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        editorRenderTexture.unbind();
+        {
+            int w = editorRenderTexture.get_texture()->get_width();
+            int h = editorRenderTexture.get_texture()->get_height();
+            // window.setViewport(0, 0, w, h);
+                // ImGui::SetNextWindowPos({0, h + window.getWindowHeight() / 8.f});
+                ImGui::Begin("Test");
+                    ImGui::SetWindowFocus("SDFL Editor");
+                    text_editor.Render("SDFL Editor", {(float)w, (float)h});
+                ImGui::End();
+                ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            editorRenderTexture.unbind();
+        }
 
 
         ImGui::SetCurrentContext(mainContext);
+
+
+        if (ImGui::IsKeyReleased(ImGuiKey_Escape)) {
+            window.setFullScreen(false);
+            fullscreen = false;
+        }
 
         window.clear();
         ImGui_ImplOpenGL3_NewFrame();
