@@ -490,3 +490,61 @@ std::vector<std::string> yt2d::Window::getDraggedPaths() const
     if (!g_drag_paths.empty()) g_drag_paths.clear();
     return result;
 }
+
+void yt2d::Window::setFullScreen(bool fullscreen)
+{
+#if defined __EMSCRIPTEN__ || defined SDL_BACKEND
+    if (fullscreen) {
+        SDL_SetWindowFullscreen(m_sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    } else {
+        SDL_SetWindowFullscreen(m_sdl_window, 0);
+    }
+#else
+    static int windowed_x = 0;
+    static int windowed_y = 0;
+    static int windowed_width = m_width;
+    static int windowed_height = m_height;
+    
+    if (fullscreen) {
+        glfwGetWindowPos(m_window, &windowed_x, &windowed_y);
+        glfwGetWindowSize(m_window, &windowed_width, &windowed_height);
+        
+        // find which monitor the window is mostly on
+        int monitor_count;
+        GLFWmonitor** monitors = glfwGetMonitors(&monitor_count);
+        
+        GLFWmonitor* target_monitor = glfwGetPrimaryMonitor(); // fallback
+        int max_overlap = 0;
+        
+        for (int i = 0; i < monitor_count; i++) {
+            int mx, my, mw, mh;
+            glfwGetMonitorPos(monitors[i], &mx, &my);
+            const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+            mw = mode->width;
+            mh = mode->height;
+            
+            // calculate overlap area between window and monitor
+            int overlap_x = std::max(0, std::min(windowed_x + windowed_width, mx + mw) - std::max(windowed_x, mx));
+            int overlap_y = std::max(0, std::min(windowed_y + windowed_height, my + mh) - std::max(windowed_y, my));
+            int overlap_area = overlap_x * overlap_y;
+            
+            if (overlap_area > max_overlap) {
+                max_overlap = overlap_area;
+                target_monitor = monitors[i];
+            }
+        }
+        
+        // get the video mode of the target monitor
+        const GLFWvidmode* mode = glfwGetVideoMode(target_monitor);
+        
+        // set fullscreen on the detected monitor
+        glfwSetWindowMonitor(m_window, target_monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    } else {
+        // restore windowed mode
+        glfwSetWindowMonitor(m_window, NULL, windowed_x, windowed_y, windowed_width, windowed_height, 0);
+    }
+    
+    glfwGetFramebufferSize(m_window, (int*)&m_width, (int*)&m_height);
+    glViewport(0, 0, m_width, m_height);
+#endif
+}

@@ -71,6 +71,8 @@ namespace yt2d
 
         std::vector<std::string> getDraggedPaths() const;
 
+        void setFullScreen(bool fullscreen);
+
     private:
         YT2D_NODISCARD YT2D_STATUS Init(int flags);
 
