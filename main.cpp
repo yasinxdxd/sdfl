@@ -150,6 +150,14 @@ enum class PageState {
 PageState page_state = PageState::FILE_STATE;
 
 
+enum class RenderMode : uint32_t {
+    NORMAL = 0,
+    RED_CYAN_ANAGLYPH,
+    VR,
+};
+RenderMode render_mode = RenderMode::NORMAL;
+float anaglyph_offset[2] = {0.05f, 0.f};
+
 void createRendererWindow() {
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
     ImGui::Begin("Renderer", nullptr, window_flags);
@@ -218,6 +226,21 @@ void createExportWindow() {
         if (ImGui::Button("Export SDF", {120, 28})) {
             // for now hardcoded path
             exportSDFData("testpy/test_sdf_data.bin");
+        }
+    }
+    ImGui::End();
+}
+
+void createModeWindow() {
+    static bool anaglyph_selected = false;
+    ImGui::Begin("Render Mode");
+    {
+        if (ImGui::RadioButton("Normal Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::NORMAL)) anaglyph_selected = false;
+        if (ImGui::RadioButton("VR Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::VR)) anaglyph_selected = false;
+        if (ImGui::RadioButton("Anaglyph Mode", reinterpret_cast<int*>(&render_mode), (int)RenderMode::RED_CYAN_ANAGLYPH)) anaglyph_selected = true;
+
+        if (anaglyph_selected) {
+            ImGui::DragFloat2("offset", anaglyph_offset, 0.01, -20, 20);
         }
     }
     ImGui::End();
@@ -394,6 +417,7 @@ void renderMainUI(const yt2d::Window& window) {
     case PageState::RENDER_STATE:
         createRendererWindow();
         createExportWindow();
+        createModeWindow();
         createInfoWindow();
         ht::draw_cam_frame();
         break;
@@ -406,6 +430,14 @@ void renderMainUI(const yt2d::Window& window) {
     }
 }
 
+static bool save_string_to_file(const std::string& path, const std::string& content) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) return false;
+
+    file.write(content.c_str(), content.size());
+    return file.good();
+}
+
 int main(void) {
     yt2d::Window window("SDF Renderer", 1280, 720);
     InitImgui(window);
@@ -414,10 +446,7 @@ int main(void) {
     screenTexture->generate_texture();
     screenRenderTexture.set_texture(screenTexture);
 
-    // editorTexture = new Texture2D("/home/yasinxdxd/Downloads/bg.jpg");
-    // editorTexture->generate_texture();
     TextEditor text_editor;
-    
     editorTexture = new Texture2D(640, 480, nullptr);
     editorTexture->generate_texture();
     editorRenderTexture.set_texture(editorTexture);
@@ -499,6 +528,8 @@ int main(void) {
                 shader->set<int, 2>("window_size", screenSize.x, screenSize.y);
                 shader->set<float, 1>("elapsed_time", elapsed_time);
                 shader->set<bool, 1>("ht_tracking_enabled", ht::is_head_tracking_enabled());
+                shader->set<unsigned int, 1>("render_mode", (unsigned int)render_mode);
+                shader->set<float, 2>("anaglyph_offset", anaglyph_offset[0], anaglyph_offset[1]);
                 cv::Point3f hc = ht::get_head_center() * 32.0f; // TODO: effect can be
                 // printf("head_center: %f, %f, %f\n", hc.x, hc.y, hc.z);
                 float hcz = (2.5f * hc.z);

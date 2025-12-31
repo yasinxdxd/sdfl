@@ -494,6 +494,7 @@ vec3 calc_color(vec3 cam_pos, vec2 uv) {
 
     return color;
 }
+
 `, bg)
 }
 
@@ -505,7 +506,7 @@ func generateGlslFragmentAnaglyphRender(cameraFunCall *FunCall) {
     vec2 d_uv = o_vertex_uv * 2. - 1.;
 
 	// this offset should be setable
-	vec3 offset = vec3(0.05, 0, 0);
+	vec3 offset = vec3(anaglyph_offset, 0);
     vec3 color_left = calc_color(cam_pos - offset, d_uv);
     color_left.gb = vec2(0);
 
@@ -516,6 +517,19 @@ func generateGlslFragmentAnaglyphRender(cameraFunCall *FunCall) {
 
     return vec4(color, 1.0);
 }
+`)
+}
+
+func generateGlslFragmentNormalRender(cameraFunCall *FunCall) {
+	generateFragmentCode("vec4 NORMAL_RENDER() {\n")
+	generateGlslCamera(cameraFunCall)
+
+	generateFragmentCode(`
+    vec2 d_uv = o_vertex_uv * 2. - 1.;
+    vec3 color = calc_color(cam_pos, d_uv);
+    return vec4(color, 1.0);
+}
+
 `)
 }
 
@@ -612,6 +626,7 @@ func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
 	generateCalculateMainScene(bg)
 
 	generateGlslFragmentAnaglyphRender(cameraFunCall)
+	generateGlslFragmentNormalRender(cameraFunCall)
 	generateLensValues()
 	generateDistortionFunctions()
 	generateGlslFragmentVRRender(cameraFunCall)
@@ -619,7 +634,18 @@ func generateGlslFragmentMain(cameraFunCall *FunCall, bg string) {
 	generateFragmentCode(`
 
 void main() {
-	frag_color = ANAGLYPH_RENDER();
+	switch (render_mode) {
+		case RENDER_MODE_ANAGLYPH:
+			frag_color = ANAGLYPH_RENDER();
+			break;
+		case RENDER_MODE_VR:
+			frag_color = VR_RENDER();
+			break;
+		case RENDER_MODE_NORMAL:
+		default:
+			frag_color = NORMAL_RENDER();
+			break;
+	}
 }
 
 `)
@@ -662,6 +688,12 @@ uniform ivec2 window_size;
 uniform float elapsed_time;
 uniform bool ht_tracking_enabled;
 uniform vec3 ht_head_center;
+uniform uint render_mode;
+uniform vec2 anaglyph_offset;
+
+#define RENDER_MODE_NORMAL   0
+#define RENDER_MODE_ANAGLYPH 1
+#define RENDER_MODE_VR       2
 
 #define SDFL_MAX_STEPS 100
 #define SDFL_MAX_DISTANCE 100.
@@ -1029,15 +1061,17 @@ SceneResult sdfl_GetDistScene(vec3 p) {
 `
 	generateCodeBoth(code)
 	generateFragmentCode(`
-	SceneResult editor = SceneResult(
-        editor_sdfl_builtin_plane(
-            p,
-            vec3(-3, 5, 2),
-            vec3(0, 0, 1),
-            vec2(3)
-        ), 3
-    );
-    d = sdfl_PushScene(editor);
+	if (render_mode == RENDER_MODE_VR) {
+		SceneResult editor = SceneResult(
+			editor_sdfl_builtin_plane(
+				p,
+				vec3(-3, 5, 2),
+				vec3(0, 0, 1),
+				vec2(3)
+			), 3
+		);
+		d = sdfl_PushScene(editor);
+	}
 `)
 }
 

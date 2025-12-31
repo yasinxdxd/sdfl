@@ -93,7 +93,9 @@ void DestroyImgui() {
     if (editorContext) {
         ImGui::SetCurrentContext(editorContext);
         ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
+        
+        // TODO: Fix this two context error!
+        // ImGui_ImplGlfw_Shutdown();
     }
     
     // shutdown main context backends
