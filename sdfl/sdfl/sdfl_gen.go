@@ -12,6 +12,7 @@ var functionSymbols = map[string]FunDef{
 	"camera":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_CAMERA, Id: "camera", FunDefArgNames: []string{"position"}},
 	"plane":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "plane", FunDefArgNames: []string{"height"}},
 	"sphere":             {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "sphere", FunDefArgNames: []string{"position", "radius"}},
+	"cylinder":           {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "cylinder", FunDefArgNames: []string{"begin", "end", "radius"}},
 	"ellipsoid":          {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "ellipsoid", FunDefArgNames: []string{"position", "radius"}},
 	"box":                {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "box", FunDefArgNames: []string{"position", "size"}},
 	"torus":              {Type: AST_FUN_DEF, SymbolType: FUN_BUILTIN_SHAPE, Id: "torus", FunDefArgNames: []string{"position", "radius", "thickness"}},
@@ -799,8 +800,8 @@ float editor_sdfl_builtin_plane(vec3 p, vec3 pos, vec3 n, vec2 size) {
     float y = dot(rel, t2);
     
     // UPDATE UV based on editor plane's local coordinates
-    editor_uv = vec2(y, x) / (size * 2.0) + 0.5; // normalize to [0,1] - size is half-dimensions
-    editor_uv.y = -editor_uv.y;
+    // editor_uv = vec2(y, x) / (size * 2.0) + 0.5; // normalize to [0,1] - size is half-dimensions
+    // editor_uv.y = -editor_uv.y;
 	
     vec2 q = abs(vec2(x, y)) - size;
     float edgeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
@@ -813,6 +814,21 @@ float sdfl_builtin_plane(vec3 p, float height) {
 
 float sdfl_builtin_sphere(vec3 p, vec3 pos, float r) {    
     return distance(pos, p) - r;
+}
+
+// https://iquilezles.org/
+// https://www.shadertoy.com/view/wdXGDr
+float sdfl_builtin_cylinder(vec3 p, vec3 a, vec3 b, float r) {
+  vec3  ba = b - a;
+  vec3  pa = p - a;
+  float baba = dot(ba,ba);
+  float paba = dot(pa,ba);
+  float x = length(pa*baba-ba*paba) - r*baba;
+  float y = abs(paba-baba*0.5)-baba*0.5;
+  float x2 = x*x;
+  float y2 = y*y*baba;
+  float d = (max(x,y)<0.0)?-min(x2,y2):(((x>0.0)?x2:0.0)+((y>0.0)?y2:0.0));
+  return sign(d)*sqrt(abs(d))/baba;
 }
 
 float sdfl_builtin_ellipsoid(vec3 p, vec3 pos, vec3 r) {
